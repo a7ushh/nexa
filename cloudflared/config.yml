@@ -2,38 +2,46 @@
 # Cloudflare tunnel for the GRAG ERP.
 #
 # The tunnel terminates HTTPS at Cloudflare's edge and forwards plain HTTP to
-# the app on localhost:5000, which is why the app itself needs no certificate.
+# the app, which is why the app itself needs no certificate. Since the app now
+# binds 127.0.0.1 only (server/src/index.js) and refuses any Host that is not
+# nexasuits.online (server/src/middleware/hostGate.js), this tunnel is the only
+# way in - there is no local access to fall back on.
 #
 # Run it with:
 #     npm run tunnel
 #
-# `tunnel` is the name created by `cloudflared tunnel create nexasuits`, and
-# the credentials file is what that command wrote. Replace <TUNNEL-UUID> with
-# the id it printed (or the file name it created in ~/.cloudflared).
+# `tunnel` is the UUID from `cloudflared tunnel create`; `cloudflared tunnel
+# list` shows it against the name "nexa". The UUID is not a secret. The
+# credentials JSON is, and it stays in %USERPROFILE%\.cloudflared where
+# cloudflared finds it by itself - never in this repository.
 # ---------------------------------------------------------------------------
 
-tunnel: nexasuits
-credentials-file: C:\Users\kumar\.cloudflared\<TUNNEL-UUID>.json
+tunnel: 555d042d-4256-49d1-a1a7-0778ed3c12bc
+
+# No `credentials-file` on purpose: cloudflared resolves
+# %USERPROFILE%\.cloudflared\<UUID>.json on its own. Hardcoding an absolute user
+# path is what broke this file before - it pointed at C:\Users\kumar.
+# A Windows service install is the one case that needs it back, because the
+# service runs as LocalSystem with a different home directory. See DEPLOY.md.
 
 # Cloudflare already logs requests; keep the local log quiet but useful.
 loglevel: info
 
 ingress:
-  # Apex domain -> the app.
+  # 127.0.0.1, not "localhost": the app no longer listens on [::1], and Windows
+  # resolves "localhost" to ::1 first.
   - hostname: nexasuits.online
-    service: http://localhost:5000
-    originRequest:
-      # The app sets a session cookie and reads X-Forwarded-Proto, both of
-      # which need the original Host preserved.
-      httpHostHeader: nexasuits.online
-      noTLSVerify: true
+    service: http://127.0.0.1:5000
 
-  # www resolves to the same app so either spelling works.
+  # www reaches the same app. No httpHostHeader rewrite - the origin's host gate
+  # accepts both spellings and should see the Host the browser actually sent, so
+  # that exactly one place decides which hosts are valid.
+  #
+  # This rule is inert until the DNS record exists:
+  #     cloudflared tunnel route dns nexa www.nexasuits.online
+  # Without it, www answers with Cloudflare error 1033.
   - hostname: www.nexasuits.online
-    service: http://localhost:5000
-    originRequest:
-      httpHostHeader: nexasuits.online
-      noTLSVerify: true
+    service: http://127.0.0.1:5000
 
   # Required final rule: anything else gets a 404 rather than being proxied.
   - service: http_status:404

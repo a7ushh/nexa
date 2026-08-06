@@ -15,8 +15,29 @@ async function start() {
   }
 
   const app = await createApp();
-  const server = app.listen(env.port, () => {
-    console.log(`GRAG ERP listening on http://localhost:${env.port} (${env.nodeEnv})`);
+
+  // Loopback only. The app is public exclusively through the Cloudflare tunnel,
+  // and cloudflared runs on this same machine, so 127.0.0.1 is the only
+  // interface that ever has to accept a connection. app.listen(port) with no
+  // host binds 0.0.0.0, which also publishes the app to every device on the LAN.
+  //
+  // This drops the [::1] listener, so the tunnel's ingress must say
+  // http://127.0.0.1:5000 rather than http://localhost:5000 - on Windows
+  // "localhost" resolves to ::1 first.
+  const server = app.listen(env.port, '127.0.0.1', () => {
+    // The reachable address and the listening address are different things now,
+    // and when the tunnel 502s you need to see both.
+    console.log(`GRAG ERP live at ${env.appUrl} (${env.nodeEnv})`);
+    console.log(`  bound to 127.0.0.1:${env.port} - not reachable from the LAN`);
+    console.log(`  answering only for: ${env.allowedHosts.join(', ')}`);
+
+    if (env.isHttps && !env.isProduction) {
+      console.warn(
+        '\n  APP_URL is public but NODE_ENV is not "production": the Vite dev server\n' +
+          '  is being exposed through the tunnel. Run "npm run serve" instead.\n',
+      );
+    }
+
     if (env.google.configured) {
       // Printed every boot: a redirect_uri_mismatch is always a mismatch
       // between this exact string and the Google Console entry.

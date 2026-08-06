@@ -7,6 +7,7 @@ import path from 'node:path';
 import { env, clientDir, clientDistDir } from './config/env.js';
 import { sessionMiddleware, idleTimeout } from './config/session.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { hostGate } from './middleware/hostGate.js';
 import apiRouter from './routes/index.js';
 
 /**
@@ -20,6 +21,16 @@ export async function createApp() {
   const app = express();
 
   app.set('trust proxy', 1);
+
+  // First, before anything that costs work. A refused request must not reach
+  // express.json() - which would buffer up to 1mb of a body we are about to
+  // discard - and above all must not reach sessionMiddleware: connect-pg-simple
+  // issues a SELECT for every request carrying a grag.sid cookie, so gating
+  // after it would turn a flood of bogus Host headers into a flood of database
+  // round-trips. Helmet's headers on the 403 protect nothing: the response is a
+  // fixed sentence with no user data and no scripts.
+  app.use(hostGate);
+
   app.use(
     helmet({
       // Client and API share an origin; CSP is relaxed so the Google sign-in

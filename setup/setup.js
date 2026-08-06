@@ -25,6 +25,17 @@ import { stdin as input, stdout as output } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 
+// utils/urls.js is deliberately dependency-free so this script can share the
+// server's URL rules without importing config/env.js - env.js loads dotenv and
+// throws on a malformed APP_URL, which is exactly what you run setup to fix.
+import {
+  driveFolderId,
+  isLoopbackOrigin,
+  normalizeOrigin,
+  originProblem,
+  redirectUriProblem,
+} from '../server/src/utils/urls.js';
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(here, '..');
 const serverDir = path.join(rootDir, 'server');
@@ -72,12 +83,20 @@ async function askRequired(label, fallback = '') {
   }
 }
 
+/**
+ * `hint` may be a string, or a function of the rejected answer - the URL checks
+ * explain what is wrong with the specific value, which a fixed string cannot.
+ */
 async function askUntil(label, fallback, validate, hint) {
   for (;;) {
     const answer = await ask(label, fallback);
     if (validate(answer)) return answer;
-    if (stdinExhausted) throw new Error(`"${label}" is invalid (${hint}) and cannot be prompted.`);
-    console.log(`    ${hint}`);
+
+    const message = typeof hint === 'function' ? hint(answer) : hint;
+    if (stdinExhausted) {
+      throw new Error(`"${label}" is invalid (${message}) and cannot be prompted.`);
+    }
+    console.log(`    ${message}`);
   }
 }
 
@@ -162,8 +181,29 @@ async function main() {
 
   heading('1. Hosting');
   values.PORT = await ask('HTTP port', prev.PORT || '5000');
-  values.APP_URL = await ask('Public app URL', prev.APP_URL || `http://localhost:${values.PORT}`);
-  values.NODE_ENV = prev.NODE_ENV || 'development';
+  // Validated, not just accepted. A scheme-less value here (APP_URL=example.com)
+  // silently breaks three things at once: Google rejects the derived redirect
+  // URI with `Error 400: invalid_request`, the session cookie loses `secure`,
+  // and every post-sign-in redirect becomes a relative path.
+  values.APP_URL = normalizeOrigin(
+    await askUntil(
+      'Public app URL (include the scheme)',
+      prev.APP_URL || `http://localhost:${values.PORT}`,
+      (url) => originProblem(url) === null,
+      (url) => originProblem(url),
+    ),
+  );
+
+  // The mode follows the URL. A public https origin is a deployment and must
+  // serve the built client from client/dist: Vite's dev server is not built to
+  // face the internet, and enforces its own host allow-list on top of ours.
+  // A loopback URL stays in development so hot reload keeps working.
+  values.NODE_ENV = await askUntil(
+    'Mode (development = Vite hot reload, production = serve client/dist)',
+    prev.NODE_ENV || (isLoopbackOrigin(values.APP_URL) ? 'development' : 'production'),
+    (mode) => mode === 'development' || mode === 'production',
+    'type development or production',
+  );
   values.IDLE_TIMEOUT_MINUTES = await ask(
     'Idle logout (minutes)',
     prev.IDLE_TIMEOUT_MINUTES || '10',
@@ -206,21 +246,24 @@ async function main() {
   console.log('  Enable the Google Drive API too if you want the Backup button to work.');
   values.GOOGLE_CLIENT_ID = await ask('Client ID', prev.GOOGLE_CLIENT_ID || '');
   values.GOOGLE_CLIENT_SECRET = await ask('Client secret', prev.GOOGLE_CLIENT_SECRET || '');
-  values.GOOGLE_REDIRECT_URI = await ask(
+  // Blocking, not a warning. Google answers a non-loopback http:// redirect
+  // with a bare "Error 400: invalid_request" that names nothing, and the
+  // warning this replaced was printed once and scrolled away unread. When
+  // answers are piped in, askUntil throws rather than looping - a scripted run
+  // should fail loudly instead of writing a .env that cannot sign in.
+  values.GOOGLE_REDIRECT_URI = await askUntil(
     'Redirect URI (must match the Console entry exactly)',
     prev.GOOGLE_REDIRECT_URI || `${values.APP_URL}/api/auth/google/callback`,
+    (uri) => redirectUriProblem(uri) === null,
+    (uri) => redirectUriProblem(uri),
   );
 
-  // Google answers a non-loopback http:// redirect with a bare
-  // "Error 400: invalid_request", so it is worth catching here instead.
-  const { redirectUriProblem } = await import('../server/src/config/google.js');
-  const uriProblem = redirectUriProblem(values.GOOGLE_REDIRECT_URI);
-  if (uriProblem) {
-    console.log(`\n  Warning: ${uriProblem}\n`);
-  }
-  values.GOOGLE_DRIVE_FOLDER_ID = await ask(
-    'Drive folder id for backups (blank = My Drive root)',
-    prev.GOOGLE_DRIVE_FOLDER_ID || '',
+  // Accepts a pasted share link as well as a bare id; backupService needs the id.
+  values.GOOGLE_DRIVE_FOLDER_ID = driveFolderId(
+    await ask(
+      'Drive folder id or share link for backups (blank = My Drive root)',
+      prev.GOOGLE_DRIVE_FOLDER_ID || '',
+    ),
   );
   if (!values.GOOGLE_CLIENT_ID || !values.GOOGLE_CLIENT_SECRET) {
     console.log('  Left blank - sign-in stays disabled until you fill these into server/.env.');
@@ -274,8 +317,21 @@ async function main() {
 
   console.log('\n\x1b[1mSetup complete.\x1b[0m');
   console.log('  npm install     install dependencies (if you have not already)');
-  console.log('  npm run dev     server on :' + values.PORT + ' + Vite client with hot reload');
-  console.log('  npm run build && npm start    production build served from :' + values.PORT);
+
+  if (values.NODE_ENV === 'production') {
+    // The app binds 127.0.0.1 and refuses any Host other than APP_URL, so the
+    // tunnel is the only way to reach it. Saying so here saves the first
+    // "why is localhost refusing me" round trip.
+    console.log(`  npm run serve   build the client, then serve it and the API on :${values.PORT}`);
+    console.log('  npm run tunnel  connect the Cloudflare tunnel (second terminal)');
+    console.log('');
+    console.log(`  Reachable only at ${values.APP_URL} - http://localhost:${values.PORT} answers`);
+    console.log('  403 by design. See DEPLOY.md, "Who can reach it".');
+    console.log('  "npm start" without a prior build refuses to boot: client/dist must exist.');
+  } else {
+    console.log(`  npm run dev     server on :${values.PORT} + Vite client with hot reload`);
+    console.log(`  npm run serve   production build served from :${values.PORT}`);
+  }
   console.log('');
 
   rl.close();
