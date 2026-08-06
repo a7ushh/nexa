@@ -1,0 +1,60 @@
+/**
+ * Design tokens from the Figma "loading" page (iRmDeaUQyeS1MrMM0XXdB7).
+ *
+ * Colours are stored as space-separated RGB channels so Tailwind can apply
+ * opacity modifiers (`bg-ink/50`), with a matching `--x` value for plain CSS.
+ */
+
+:root {
+  /* Surfaces */
+  --off-white-rgb: 250 249 246; /* page and navbar background */
+  --surface-rgb: 255 255 255; /* cards, table rows, inputs */
+  --ink-rgb: 0 0 0;
+
+  /* Brand */
+  --navy-rgb: 12 50 74; /* #0c324a - rail, filter panel, pill buttons */
+  --accent-rgb: 0 111 255; /* #006fff - Apply Filters, primary confirm */
+  --card-accent-rgb: 68 138 255; /* #448aff - company cards */
+
+  /* Lines and fills */
+  --border-rgb: 231 227 220; /* #e7e3dc - navbar rule, card edges */
+  --outline-rgb: 204 204 204; /* #cccccc - input outlines */
+  --table-head-rgb: 200 199 197; /* #c8c7c5 */
+  --icon-box-rgb: 246 242 249; /* #f6f2f9 - leading icon cell in a field */
+  --pin-box-rgb: 246 246 246; /* #f6f6f6 - PIN digit boxes */
+  --muted-rgb: 224 230 233; /* disabled button fill */
+
+  /* Date picker (Figma variables: Accent / Light Accent) */
+  --calendar-accent-rgb: 151 208 195; /* #97d0c3 */
+  --calendar-accent-light-rgb: 174 226 214; /* #aee2d6 */
+  --calendar-surface-rgb: 251 251 251;
+
+  /* Status */
+  --danger-rgb: 220 38 38;
+
+  /* Text */
+  --text-rgb: 0 0 0;
+  --text-body-rgb: 68 68 68; /* #444444 */
+  --text-soft-rgb: 115 115 115; /* #737373 */
+  --text-on-dark-rgb: 255 255 255;
+
+  /* Plain-CSS equivalents */
+  --off-white: rgb(var(--off-white-rgb));
+  --surface: rgb(var(--surface-rgb));
+  --navy: rgb(var(--navy-rgb));
+  --accent: rgb(var(--accent-rgb));
+  --border: rgb(var(--border-rgb));
+  --text: rgb(var(--text-rgb));
+  --text-muted: rgb(var(--text-soft-rgb));
+
+  /* Shape */
+  --radius: 8px;
+  --radius-pill: 999px;
+
+  /* Layout constants measured in the Figma frames */
+  --navbar-height: 86px;
+  --navbar-border: 2px;
+  --rail-width: 70px;
+  --filter-panel-width: 415px;
+  --brand-tracking: 8px;
+}

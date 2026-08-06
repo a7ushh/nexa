@@ -1,0 +1,118 @@
+@import '@fontsource-variable/raleway';
+@import '@fontsource-variable/source-code-pro';
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-offwhite font-sans text-data text-ink_text antialiased;
+    overflow-x: hidden;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    @apply font-sans;
+  }
+
+  /* Number fields match the plain outlined fields in the design. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}
+
+@layer utilities {
+  /* Keeps a region scrollable without the bar showing - used by the filter
+     panel, which is only a little taller than the viewport on some modules. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer components {
+  /* --- buttons ---------------------------------------------------------- */
+
+  /* Navy pill - COLUMNS, + ADD LOT. */
+  .btn-pill {
+    @apply inline-flex h-[38px] items-center justify-center gap-2 rounded-pill bg-navy px-5
+           text-data uppercase tracking-[1px] text-on-dark transition-opacity
+           hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Bright blue confirm - Apply Filters, Issue Challan. */
+  .btn-accent {
+    @apply inline-flex h-[38px] items-center justify-center gap-2 rounded-pill bg-accent px-6
+           text-data uppercase tracking-[1px] text-on-dark transition-opacity
+           hover:opacity-90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-body/60;
+  }
+
+  /* Outlined - Clear Filters (on navy) and Cancel (on light). Inherits its
+     colour from the parent, so the same class works on either background. */
+  .btn-ghost {
+    @apply inline-flex h-[38px] items-center justify-center gap-2 rounded-pill border
+           border-current bg-transparent px-6 text-data uppercase tracking-[1px]
+           transition-opacity hover:opacity-75 disabled:opacity-50;
+  }
+
+  .btn-danger,
+  .btn-danger-outline {
+    @apply inline-flex h-[38px] items-center justify-center gap-2 rounded-pill border
+           border-danger bg-transparent px-6 text-data uppercase tracking-[1px] text-danger
+           transition-colors hover:bg-danger/5;
+  }
+
+  /* Small square icon action - the edit / delete pair in a table row. */
+  .btn-icon {
+    @apply inline-flex h-[26px] w-[26px] items-center justify-center rounded-[4px]
+           text-ink_text transition-colors hover:bg-ink/5 disabled:opacity-40;
+  }
+
+  /* --- fields ----------------------------------------------------------- */
+
+  /* White field with a 1px outline and an optional leading icon cell. */
+  .field-shell {
+    @apply flex h-[42px] items-stretch overflow-hidden rounded-[6px] border border-outline
+           bg-surface focus-within:border-accent;
+  }
+
+  .field-icon {
+    @apply flex w-[38px] shrink-0 items-center justify-center border-r border-outline
+           bg-icon-box text-body;
+  }
+
+  .field-control {
+    @apply min-w-0 flex-1 bg-transparent px-3 text-data text-ink_text outline-none
+           placeholder:text-soft;
+  }
+
+  .field-clear {
+    @apply flex w-[34px] shrink-0 items-center justify-center text-body
+           transition-colors hover:text-ink_text;
+  }
+
+  .field-label {
+    @apply mb-[6px] block text-data text-ink_text;
+  }
+}

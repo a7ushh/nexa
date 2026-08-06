@@ -1,0 +1,39 @@
+{
+  "name": "grag-erp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GRAG Production ERP - grey, embroidery and handwork challan tracking",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "setup": "node setup/setup.js",
+    "migrate": "node server/src/db/migrate.js",
+    "seed:root": "node server/src/db/seedRoot.js",
+    "dev": "node --watch-path=./server/src --watch-preserve-output server/src/index.js",
+    "build": "npm run build -w client",
+    "start": "node server/src/index.js",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@iconify-json/bx": "^1.2.3",
+    "@iconify-json/f7": "^1.2.2",
+    "@iconify-json/feather": "^1.2.1",
+    "@iconify-json/file-icons": "^1.2.2",
+    "@iconify-json/material-symbols": "^1.2.88",
+    "@iconify-json/mingcute": "^1.2.8",
+    "@svgr/core": "^8.1.0",
+    "@svgr/plugin-jsx": "^8.1.0",
+    "eslint": "^9.18.0",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
+    "unplugin-icons": "^23.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

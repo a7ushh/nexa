@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(psql --version)",
+      "mcp__eb54c723-2d9f-4d39-91b9-340f62ef3885__get_screenshot"
+    ]
+  }
+}
