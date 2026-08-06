@@ -23,8 +23,13 @@ export const sessionMiddleware = session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
+    // `lax` still sends the cookie on the top-level redirect back from Google.
     sameSite: 'lax',
-    secure: env.isProduction,
+    // Tied to how the app is actually reached rather than NODE_ENV: behind the
+    // Cloudflare tunnel the browser talks https, and a cookie without `secure`
+    // there would be sent in the clear. `trust proxy` is set in app.js so
+    // Express reads X-Forwarded-Proto from cloudflared.
+    secure: env.isHttps,
     // Intentionally no maxAge: the cookie dies with the browser session.
     // The server enforces the idle window via `expires` on the store record.
   },

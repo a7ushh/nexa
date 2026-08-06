@@ -210,6 +210,14 @@ async function main() {
     'Redirect URI (must match the Console entry exactly)',
     prev.GOOGLE_REDIRECT_URI || `${values.APP_URL}/api/auth/google/callback`,
   );
+
+  // Google answers a non-loopback http:// redirect with a bare
+  // "Error 400: invalid_request", so it is worth catching here instead.
+  const { redirectUriProblem } = await import('../server/src/config/google.js');
+  const uriProblem = redirectUriProblem(values.GOOGLE_REDIRECT_URI);
+  if (uriProblem) {
+    console.log(`\n  Warning: ${uriProblem}\n`);
+  }
   values.GOOGLE_DRIVE_FOLDER_ID = await ask(
     'Drive folder id for backups (blank = My Drive root)',
     prev.GOOGLE_DRIVE_FOLDER_ID || '',

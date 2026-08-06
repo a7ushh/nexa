@@ -5,3 +5,8 @@ dist/
 *.log
 backups/
 .DS_Store
+
+# Cloudflare tunnel credentials - never commit these
+cloudflared/*.json
+*.pem
+server/.env.backup-*

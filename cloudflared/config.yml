@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# Cloudflare tunnel for the GRAG ERP.
+#
+# The tunnel terminates HTTPS at Cloudflare's edge and forwards plain HTTP to
+# the app on localhost:5000, which is why the app itself needs no certificate.
+#
+# Run it with:
+#     npm run tunnel
+#
+# `tunnel` is the name created by `cloudflared tunnel create nexasuits`, and
+# the credentials file is what that command wrote. Replace <TUNNEL-UUID> with
+# the id it printed (or the file name it created in ~/.cloudflared).
+# ---------------------------------------------------------------------------
+
+tunnel: nexasuits
+credentials-file: C:\Users\kumar\.cloudflared\<TUNNEL-UUID>.json
+
+# Cloudflare already logs requests; keep the local log quiet but useful.
+loglevel: info
+
+ingress:
+  # Apex domain -> the app.
+  - hostname: nexasuits.online
+    service: http://localhost:5000
+    originRequest:
+      # The app sets a session cookie and reads X-Forwarded-Proto, both of
+      # which need the original Host preserved.
+      httpHostHeader: nexasuits.online
+      noTLSVerify: true
+
+  # www resolves to the same app so either spelling works.
+  - hostname: www.nexasuits.online
+    service: http://localhost:5000
+    originRequest:
+      httpHostHeader: nexasuits.online
+      noTLSVerify: true
+
+  # Required final rule: anything else gets a 404 rather than being proxied.
+  - service: http_status:404

@@ -49,6 +49,11 @@ export const env = {
   port: number('PORT', 5000),
   appUrl: optional('APP_URL', 'http://localhost:5000'),
 
+  /** True when the app is reached over https, e.g. behind the tunnel. */
+  get isHttps() {
+    return this.appUrl.startsWith('https://');
+  },
+
   db: {
     host: optional('PGHOST', 'localhost'),
     port: number('PGPORT', 6789),
