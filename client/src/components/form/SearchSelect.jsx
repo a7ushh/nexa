@@ -24,6 +24,10 @@ export default function SearchSelect({
   renderOption,
   onSelect,
   disabled,
+  // Optional per-option row classes - the lot field tints each row by where the
+  // lot stands. A caller that supplies a background must supply its own hover
+  // too, or the default would paint over the colour on mouseover.
+  optionClassName,
 }) {
   const [options, setOptions] = useState([]);
   const [open, setOpen] = useState(false);
@@ -111,7 +115,9 @@ export default function SearchSelect({
                   onSelect(option);
                   setOpen(false);
                 }}
-                className="w-full px-4 py-2 text-left text-data transition-colors hover:bg-offwhite"
+                className={`w-full px-4 py-2 text-left text-data transition-colors ${
+                  optionClassName?.(option) || 'hover:bg-offwhite'
+                }`}
               >
                 {renderOption(option)}
               </button>

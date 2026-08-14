@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import AppShell from '../layouts/AppShell.jsx';
 import RecordSections from '../components/table/RecordSections.jsx';
 import ColumnSelector from '../components/table/ColumnSelector.jsx';
+import LotProgress from '../components/table/LotProgress.jsx';
 import SelectionBar from '../components/table/SelectionBar.jsx';
 import RecordModal from '../components/form/RecordModal.jsx';
 import SearchSelect from '../components/form/SearchSelect.jsx';
@@ -39,6 +40,17 @@ const COLUMNS = [
   { key: 'quantity', label: 'Quantity', align: 'right' },
   { key: 'dupatta', label: 'Dupatta', render: (row) => dupattaLabel(row.dupatta) },
   { key: 'bottom', label: 'Bottom', render: (row) => (row.bottom ? 'Yes' : 'No') },
+  // Where the lot's pieces currently are, across both trades. Sorts by how far
+  // through the chain the lot is, since the cell itself is a bar.
+  {
+    key: 'progress',
+    label: 'Progress',
+    block: true,
+    // `onChanged` is bound in the component - closing a lot re-sections the
+    // table, so the list has to reload. See `columns` below.
+    render: (row) => <LotProgress row={row} />,
+    sortValue: (row) => Number(row.stages?.completed ?? 0),
+  },
 ];
 
 const dupattaLabel = (value) => (value === 'no' ? 'No' : value.charAt(0).toUpperCase() + value.slice(1));
@@ -59,11 +71,29 @@ const emptyLot = () => ({
 export default function Grey() {
   const fetcher = useCallback((query) => greyApi.list(query), []);
 
+  // Closing a lot moves it between sections, so the progress cell needs the
+  // page's `reload`. A ref keeps `allColumns` referentially stable - rebuilding
+  // it every render would restart the fetch loop in useRecords.
+  const reloadRef = useRef(null);
+  const columns = useMemo(
+    () =>
+      COLUMNS.map((column) =>
+        column.key === 'progress'
+          ? {
+              ...column,
+              render: (row) => <LotProgress row={row} onChanged={() => reloadRef.current?.()} />,
+            }
+          : column,
+      ),
+    [],
+  );
+
   const searchMasters = useCallback(async (term) => {
     const payload = await mastersApi.search(term);
     return payload.masters;
   }, []);
-  const page = useModulePage({ filterFields: FILTER_FIELDS, allColumns: COLUMNS, fetcher });
+  const page = useModulePage({ filterFields: FILTER_FIELDS, allColumns: columns, fetcher });
+  reloadRef.current = page.reload;
 
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);

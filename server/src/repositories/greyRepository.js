@@ -1,12 +1,29 @@
 import { query } from '../config/db.js';
 import { SqlBuilder, greyFilters } from './filters.js';
 
+/**
+ * The per-trade totals feed two things: the quantity chain (handwork draws on
+ * what embroidery gave back) and the progress bar on the Grey table. Both need
+ * the same four numbers, so they are gathered once here.
+ *
+ * `issued_qty` / `issued_dup` stay as the across-both-trades totals - the edit
+ * guard in greyService uses them to stop a lot shrinking below what has already
+ * left it, which is a question about the lot as a whole.
+ */
 const SELECT = `
   SELECT g.id, g.company_id, g.lot_no, g.date, g.master_id, m.name AS master_head,
          g.fabric, g.chart, g.cut, g.quantity, g.dupatta, g.bottom,
-         g.created_at, g.updated_at,
+         g.created_at, g.updated_at, g.closed_at, g.closed_by,
          COALESCE(i.issued_qty, 0) AS issued_qty,
          COALESCE(i.issued_dup, 0) AS issued_dup,
+         COALESCE(e.issued, 0)       AS emb_issued,
+         COALESCE(e.received, 0)     AS emb_received,
+         COALESCE(e.issued_dup, 0)   AS emb_issued_dup,
+         COALESCE(e.received_dup, 0) AS emb_received_dup,
+         COALESCE(h.issued, 0)       AS hw_issued,
+         COALESCE(h.received, 0)     AS hw_received,
+         COALESCE(h.issued_dup, 0)   AS hw_issued_dup,
+         COALESCE(h.received_dup, 0) AS hw_received_dup,
          (SELECT COUNT(*) FROM record_revisions r
            WHERE r.table_name = 'grey_lots' AND r.record_id = g.id) AS revision_count
     FROM grey_lots g
@@ -16,6 +33,32 @@ const SELECT = `
         FROM issue_challans ic
        WHERE ic.lot_id = g.id AND ic.deleted_at IS NULL
     ) i ON true
+    LEFT JOIN LATERAL (
+      SELECT SUM(ic.quantity) AS issued,
+             SUM(ic.dup_qty)  AS issued_dup,
+             SUM(COALESCE(rc.received, 0))     AS received,
+             SUM(COALESCE(rc.received_dup, 0)) AS received_dup
+        FROM issue_challans ic
+        LEFT JOIN LATERAL (
+          SELECT SUM(quantity) AS received, SUM(dup_qty) AS received_dup
+            FROM receive_challans r2
+           WHERE r2.issue_challan_id = ic.id AND r2.deleted_at IS NULL
+        ) rc ON true
+       WHERE ic.lot_id = g.id AND ic.kind = 'embroidery' AND ic.deleted_at IS NULL
+    ) e ON true
+    LEFT JOIN LATERAL (
+      SELECT SUM(ic.quantity) AS issued,
+             SUM(ic.dup_qty)  AS issued_dup,
+             SUM(COALESCE(rc.received, 0))     AS received,
+             SUM(COALESCE(rc.received_dup, 0)) AS received_dup
+        FROM issue_challans ic
+        LEFT JOIN LATERAL (
+          SELECT SUM(quantity) AS received, SUM(dup_qty) AS received_dup
+            FROM receive_challans r2
+           WHERE r2.issue_challan_id = ic.id AND r2.deleted_at IS NULL
+        ) rc ON true
+       WHERE ic.lot_id = g.id AND ic.kind = 'handwork' AND ic.deleted_at IS NULL
+    ) h ON true
    WHERE g.company_id = $1 AND g.deleted_at IS NULL`;
 
 export async function list(companyId, filters = {}) {
@@ -34,11 +77,47 @@ export async function findById(companyId, id, client = { query }) {
   return rows[0] ?? null;
 }
 
-/** Type-ahead for the lot no. field on the challan forms. */
+/**
+ * Type-ahead for the lot no. field on the challan forms.
+ *
+ * Closed lots are left out: the point of closing one is that it is finished, so
+ * offering it as somewhere to issue more work against would undo that. It still
+ * appears on the Grey page under Past Records - only this lookup skips it.
+ */
 export async function search(companyId, term, limit = 10) {
   const { rows } = await query(
-    `${SELECT} AND g.lot_no ILIKE $2 ORDER BY g.lot_no DESC LIMIT $3`,
+    `${SELECT} AND g.closed_at IS NULL AND g.lot_no ILIKE $2
+      ORDER BY g.lot_no DESC LIMIT $3`,
     [companyId, `%${term}%`, limit],
+  );
+  return rows;
+}
+
+/**
+ * Every challan tied to a lot, both trades, with how much of each has come back.
+ *
+ * A lot's quantity is routinely split across several challans, so the progress
+ * bar's popover needs the individual rows rather than the totals the list
+ * already carries. Fetched on demand - one lot at a time - to keep the Grey
+ * list payload small.
+ */
+export async function flow(companyId, lotId) {
+  const { rows } = await query(
+    `SELECT ic.id, ic.kind, ic.challan_no, ic.date, ic.quantity, ic.dup_qty,
+            m.name AS master_head,
+            COALESCE(rc.received, 0)     AS received,
+            COALESCE(rc.received_dup, 0) AS received_dup,
+            COALESCE(rc.receipts, 0)     AS receipts
+       FROM issue_challans ic
+       LEFT JOIN masters m ON m.id = ic.master_id
+       LEFT JOIN LATERAL (
+         SELECT SUM(quantity) AS received, SUM(dup_qty) AS received_dup, COUNT(*) AS receipts
+           FROM receive_challans r2
+          WHERE r2.issue_challan_id = ic.id AND r2.deleted_at IS NULL
+       ) rc ON true
+      WHERE ic.lot_id = $1 AND ic.company_id = $2 AND ic.deleted_at IS NULL
+      ORDER BY ic.kind, ic.date, ic.id`,
+    [lotId, companyId],
   );
   return rows;
 }
@@ -88,6 +167,23 @@ export async function update(client, companyId, id, data) {
       data.bottom,
       data.userId,
     ],
+  );
+  return rows[0]?.id ?? null;
+}
+
+/** Marks a lot finished by hand, or reopens it. */
+export async function setClosed(client, companyId, id, userId, closed) {
+  const { rows } = await client.query(
+    // The casts are required: inside a CASE with a NULL branch Postgres cannot
+    // infer a parameter's type and falls back to text, which then clashes with
+    // the bigint column.
+    `UPDATE grey_lots
+        SET closed_at = CASE WHEN $4::boolean THEN now() ELSE NULL END,
+            closed_by = CASE WHEN $4::boolean THEN $3::bigint ELSE NULL END,
+            updated_by = $3::bigint, updated_at = now()
+      WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL
+      RETURNING id`,
+    [id, companyId, userId, closed],
   );
   return rows[0]?.id ?? null;
 }

@@ -70,9 +70,6 @@ export const LOG_ACTIONS = Object.freeze({
   USER_REMOVE: 'USER_REMOVE',
 });
 
-/** A grey lot older than this drops into "Past Operation". */
-export const GREY_PAST_AFTER_DAYS = 30;
-
 /** An issue challan not fully received after this many days is "Not Received". */
 export const ISSUE_DEADLINE_DAYS = 7;
 

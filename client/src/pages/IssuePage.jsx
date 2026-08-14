@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppShell from '../layouts/AppShell.jsx';
 import RecordSections from '../components/table/RecordSections.jsx';
 import ColumnSelector from '../components/table/ColumnSelector.jsx';
@@ -6,20 +7,25 @@ import SelectionBar from '../components/table/SelectionBar.jsx';
 import RecordModal from '../components/form/RecordModal.jsx';
 import SearchSelect from '../components/form/SearchSelect.jsx';
 import HistoryModal from '../components/HistoryModal.jsx';
+import ReceiptsModal from '../components/ReceiptsModal.jsx';
 import ShareSheet from '../components/ShareSheet.jsx';
 import DeadlineList from '../components/DeadlineList.jsx';
 import { challans, grey as greyApi, masters as mastersApi } from '../api/resources.js';
+import { currentStage } from '../config/lotStages.js';
 import { useModulePage } from '../hooks/useModulePage.js';
 import { formatDate, formatMoney, today } from '../utils/format.js';
 import { IconAdd, IconChart, IconFabric, IconNumber, IconPerson } from '../components/icons.jsx';
 
 /**
- * Issue challans for either trade. steps.md gives embroidery a dupatta and its
- * quantity; handwork has neither, so those columns and fields drop out.
+ * Issue challans for either trade.
+ *
+ * Both trades carry the same columns and the same form - only the page title
+ * differs. What still differs is the quantity chain behind them: embroidery
+ * draws on the lot, handwork on what embroidery gave back (utils/quantities.js).
  */
 export default function IssuePage({ kind }) {
   const api = useMemo(() => challans(kind), [kind]);
-  const isEmbroidery = kind === 'embroidery';
+  const navigate = useNavigate();
 
   const filterFields = useMemo(
     () =>
@@ -29,10 +35,10 @@ export default function IssuePage({ kind }) {
         { key: 'masterHead', label: 'Master Head', icon: IconPerson, placeholder: 'Anil Sharma' },
         { key: 'fabric', label: 'Fabric', icon: IconFabric, placeholder: 'Cotton' },
         { key: 'design', label: 'Design', icon: IconChart, placeholder: 'design-07' },
-        isEmbroidery && { key: 'dupatta', label: 'Dupatta', type: 'boolean' },
+        { key: 'dupatta', label: 'Dupatta', type: 'boolean' },
         { key: 'date', label: 'Date', type: 'dateRange' },
-      ].filter(Boolean),
-    [isEmbroidery],
+      ],
+    [],
   );
 
   const allColumns = useMemo(
@@ -44,13 +50,13 @@ export default function IssuePage({ kind }) {
         { key: 'masterHead', label: 'Master Head' },
         { key: 'fabric', label: 'Fabric' },
         { key: 'design', label: 'Design' },
-        isEmbroidery && { key: 'dupatta', label: 'Dupatta', render: (row) => dupattaLabel(row.dupatta) },
-        isEmbroidery && { key: 'dupQty', label: 'Dup. Qty', align: 'right' },
+        { key: 'dupatta', label: 'Dupatta', render: (row) => dupattaLabel(row.dupatta) },
+        { key: 'dupQty', label: 'Dup. Qty', align: 'right' },
         { key: 'quantity', label: 'Quantity', align: 'right' },
         { key: 'rate', label: 'Rate', align: 'right' },
         { key: 'amount', label: 'Amount', align: 'right', render: (row) => formatMoney(row.amount) },
-      ].filter(Boolean),
-    [isEmbroidery],
+      ],
+    [],
   );
 
   const fetcher = useCallback((query) => api.listIssues(query), [api]);
@@ -59,6 +65,7 @@ export default function IssuePage({ kind }) {
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [revisions, setRevisions] = useState({ loading: false, items: [] });
+  const [receipts, setReceipts] = useState(null);
 
   const sections = useMemo(
     () => [
@@ -66,7 +73,15 @@ export default function IssuePage({ kind }) {
         key: 'not_received',
         label: 'Not Received',
         rows: page.rows.filter((row) => row.section === 'not_received'),
-        render: (rows) => <DeadlineList rows={rows} onOpen={openEdit} />,
+        // Overdue means a receipt is due, so this opens the receive form for
+        // that challan rather than the issue editor. Editing is still on the
+        // same row in the In Progress band below.
+        render: (rows) => (
+          <DeadlineList
+            rows={rows}
+            onOpen={(row) => navigate(`/${kind}/receive`, { state: { fromIssue: row } })}
+          />
+        ),
       },
       {
         key: 'in_progress',
@@ -88,22 +103,32 @@ export default function IssuePage({ kind }) {
     [page.rows],
   );
 
-  const searchLots = useCallback(async (term) => {
-    const payload = await greyApi.search(term);
-    return payload.rows;
-  }, []);
+  const searchLots = useCallback(
+    async (term) => {
+      const payload = await greyApi.search(term, kind);
+      return payload.rows;
+    },
+    [kind],
+  );
 
   const searchMasters = useCallback(async (term) => {
     const payload = await mastersApi.search(term);
     return payload.masters;
   }, []);
 
-  // The dupatta toggle governs the dupatta fields only. Quantity is always
-  // part of the challan and always part of the amount.
+  // Mirrors utils/amounts.js on the server, which decides the stored value: a
+  // challan bills dupatta pieces when it has them, otherwise its quantity.
+  // Any drift here shows the user one figure and saves another.
   const amountPreview = (value) => {
-    const dup = isEmbroidery && value.dupattaYes ? Number(value.dupQty || 0) : 0;
-    return formatMoney((dup + Number(value.quantity || 0)) * Number(value.rate || 0));
+    const dup = value.dupattaYes || value.onlyDupatta ? Number(value.dupQty || 0) : 0;
+    const qty = value.onlyDupatta ? 0 : Number(value.quantity || 0);
+    return formatMoney((dup > 0 ? dup : qty) * Number(value.rate || 0));
   };
+
+  // "Only Dupatta" implies the dupatta fields, so `dupattaYes` is derived
+  // rather than forced - nothing has to write to it when the mode turns on.
+  const onlyDup = (value) => Boolean(value.onlyDupatta);
+  const dupattaOn = (value) => Boolean(value.onlyDupatta || value.dupattaYes);
 
   const fields = useMemo(
     () =>
@@ -120,26 +145,47 @@ export default function IssuePage({ kind }) {
               text={value.lotText}
               onTextChange={(text) => onChange({ ...value, lotText: text, lotId: '' })}
               search={searchLots}
-              renderOption={(lot) => (
-                <span className="flex flex-col">
-                  <span className="font-semibold">{lot.lotNo}</span>
-                  <span className="text-soft">
-                    remaining {lot.remainingQty}
-                    {lot.dupatta !== 'no' && ` · dupatta ${lot.remainingDup} (${lot.dupatta})`}
-                    {lot.fabric && ` · ${lot.fabric}`}
+              // Tint each row by where the lot stands, so a glance at the list
+              // says whether a lot is still in grey, out, or back.
+              optionClassName={(lot) => {
+                const stage = currentStage(lot.stages);
+                return stage ? `${stage.tint} hover:brightness-95` : '';
+              }}
+              renderOption={(lot) => {
+                const stage = currentStage(lot.stages);
+                return (
+                  <span className="flex flex-col">
+                    <span className="flex items-center gap-2">
+                      <span className="font-semibold">{lot.lotNo}</span>
+                      {stage && (
+                        // Named as well as coloured: the two blues are close at
+                        // this opacity, and colour alone should not carry it.
+                        <span className="flex items-center gap-1 text-note text-soft">
+                          <span className={`h-[8px] w-[8px] rounded-full ${stage.bar}`} />
+                          {stage.label}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-soft">
+                      remaining {lot.remainingQty}
+                      {lot.dupatta !== 'no' && ` · dupatta ${lot.remainingDup} (${lot.dupatta})`}
+                      {lot.fabric && ` · ${lot.fabric}`}
+                    </span>
                   </span>
-                </span>
-              )}
+                );
+              }}
               onSelect={(lot) =>
                 // "every detail should be fetched and paste in their respective
                 // fields ... But can be editable."
+                //
+                // Master Head is deliberately not among them: a lot's master is
+                // whoever supplied the grey, which is rarely the contractor this
+                // challan is going out to.
                 onChange({
                   ...value,
                   lotId: lot.id,
                   lotText: lot.lotNo,
                   fabric: lot.fabric || value.fabric,
-                  masterId: lot.masterId ?? value.masterId,
-                  masterText: lot.masterHead || value.masterText,
                   remainingQty: lot.remainingQty,
                   remainingDup: lot.remainingDup,
                 })
@@ -172,31 +218,36 @@ export default function IssuePage({ kind }) {
             />
           ),
         },
-        { key: 'fabric', label: 'Fabric', icon: IconFabric, placeholder: 'Cotton' },
-        { key: 'design', label: 'Design', icon: IconChart, placeholder: 'design-07' },
+        { key: 'fabric', label: 'Fabric', icon: IconFabric, placeholder: 'Cotton', hidden: onlyDup },
+        { key: 'design', label: 'Design', icon: IconChart, placeholder: 'design-07', hidden: onlyDup },
         { key: 'date', label: 'Date', type: 'date' },
+
+        // A dupatta-only challan carries no garment at all: no fabric, no
+        // design, no quantity - just dupatta pieces at a rate.
+        { key: 'onlyDupatta', label: 'Only Dupatta', type: 'boolean' },
 
         // "dupatta= if no is selected then select whether diamond or chain or
         // plain, else if yes then yes"
         // The Dupatta toggle reveals the finish and the dupatta quantity;
-        // turning it off hides both and bills no dupatta pieces.
-        isEmbroidery && { key: 'dupattaYes', label: 'Dupatta', type: 'boolean' },
-        isEmbroidery && {
+        // turning it off hides both and bills no dupatta pieces. Only Dupatta
+        // implies it, so the switch is hidden there rather than shown locked.
+        { key: 'dupattaYes', label: 'Dupatta', type: 'boolean', hidden: onlyDup },
+        {
           key: 'dupatta',
           label: 'Dupatta finish',
           type: 'select',
-          hidden: (value) => value.dupattaYes,
+          hidden: (value) => dupattaOn(value),
           options: [
             { value: 'diamond', label: 'Diamond' },
             { value: 'chain', label: 'Chain' },
             { value: 'plain', label: 'Plain' },
           ],
         },
-        isEmbroidery && {
+        {
           key: 'dupQty',
           label: 'Dup. Qty',
           type: 'number',
-          hidden: (value) => !value.dupattaYes,
+          hidden: (value) => !dupattaOn(value),
           hint: (value) =>
             value.remainingDup !== undefined ? `lot has ${value.remainingDup} left` : null,
         },
@@ -204,6 +255,7 @@ export default function IssuePage({ kind }) {
           key: 'quantity',
           label: 'Quantity',
           type: 'number',
+          hidden: onlyDup,
           hint: (value) =>
             value.remainingQty !== undefined ? `lot has ${value.remainingQty} left` : null,
         },
@@ -226,8 +278,7 @@ export default function IssuePage({ kind }) {
           ),
         },
       ].filter(Boolean),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isEmbroidery, searchLots, searchMasters],
+    [searchLots, searchMasters],
   );
 
   async function openCreate() {
@@ -242,6 +293,7 @@ export default function IssuePage({ kind }) {
       fabric: '',
       design: '',
       date: today(),
+      onlyDupatta: false,
       dupattaYes: false,
       dupatta: 'diamond',
       dupQty: '',
@@ -261,6 +313,10 @@ export default function IssuePage({ kind }) {
       fabric: row.fabric,
       design: row.design,
       date: row.date,
+      // The mode is not stored - it is exactly the shape a dupatta-only
+      // challan leaves behind, so it reconstructs from the row itself.
+      onlyDupatta:
+        row.dupatta === 'yes' && !row.fabric && !row.design && Number(row.quantity) === 0,
       dupattaYes: row.dupatta === 'yes',
       dupatta: row.dupatta === 'yes' ? 'diamond' : (row.dupatta ?? 'diamond'),
       dupQty: String(row.dupQty ?? ''),
@@ -272,16 +328,20 @@ export default function IssuePage({ kind }) {
   const submit = async () => {
     setBusy(true);
     try {
+      // A dupatta-only challan stores fabric, design and quantity as empty, so
+      // the table shows blanks and the amount is dupatta pieces alone.
+      const dupattaOnly = onlyDup(form);
+
       const body = {
         challanNo: form.challanNo,
         date: form.date,
         lotId: Number(form.lotId),
         masterId: form.masterId === '' ? null : Number(form.masterId),
-        fabric: form.fabric,
-        design: form.design,
-        dupatta: isEmbroidery ? (form.dupattaYes ? 'yes' : form.dupatta) : null,
-        dupQty: isEmbroidery && form.dupattaYes ? Number(form.dupQty || 0) : 0,
-        quantity: Number(form.quantity || 0),
+        fabric: dupattaOnly ? '' : form.fabric,
+        design: dupattaOnly ? '' : form.design,
+        dupatta: dupattaOn(form) ? 'yes' : form.dupatta,
+        dupQty: dupattaOn(form) ? Number(form.dupQty || 0) : 0,
+        quantity: dupattaOnly ? 0 : Number(form.quantity || 0),
         rate: Number(form.rate || 0),
       };
 
@@ -315,6 +375,19 @@ export default function IssuePage({ kind }) {
       page.clearSelection();
       await page.reload();
     } catch (failure) {
+      page.setActionError(failure.message);
+    }
+  };
+
+  // Clicking a row answers "what has come back against this one" - the row
+  // itself only carries totals, and a challan is often received in parts.
+  const openReceipts = async (row) => {
+    setReceipts({ loading: true, challan: row, receipts: [] });
+    try {
+      const payload = await api.issueReceipts(row.id);
+      setReceipts({ loading: false, challan: payload.challan, receipts: payload.receipts });
+    } catch (failure) {
+      setReceipts(null);
       page.setActionError(failure.message);
     }
   };
@@ -367,8 +440,17 @@ export default function IssuePage({ kind }) {
           onEdit: openEdit,
           onDelete: remove,
           onHistory: openHistory,
+          onRowClick: openReceipts,
           onShare: page.roles.canShare
-            ? (row) => page.setShare({ kind, direction: 'issue', ids: [row.id] })
+            ? (row) =>
+                // masterHead only fills the override placeholder, so the sheet
+                // can show what would be printed if the field is left blank.
+                page.setShare({
+                  kind,
+                  direction: 'issue',
+                  ids: [row.id],
+                  masterHead: row.masterHead,
+                })
             : undefined,
         }}
       />
@@ -409,6 +491,15 @@ export default function IssuePage({ kind }) {
           revisions={revisions.items}
           loading={revisions.loading}
           onClose={() => page.setHistory(null)}
+        />
+      )}
+
+      {receipts && (
+        <ReceiptsModal
+          challan={receipts.challan}
+          receipts={receipts.receipts}
+          loading={receipts.loading}
+          onClose={() => setReceipts(null)}
         />
       )}
 

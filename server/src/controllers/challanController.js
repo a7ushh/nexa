@@ -37,6 +37,11 @@ export const issueHistory = asyncHandler(async (req, res) => {
   res.json({ revisions: await challanService.issueHistory(req.companyId, kindOf(req), id) });
 });
 
+export const issueReceipts = asyncHandler(async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  res.json(await challanService.issueReceipts(req.companyId, kindOf(req), id));
+});
+
 export const createIssue = asyncHandler(async (req, res) => {
   res.status(201).json(await challanService.createIssue(req, kindOf(req), issueSchema.parse(req.body)));
 });

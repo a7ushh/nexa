@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from '../layouts/AppShell.jsx';
 import RecordSections from '../components/table/RecordSections.jsx';
 import ColumnSelector from '../components/table/ColumnSelector.jsx';
@@ -16,10 +17,13 @@ import { IconAdd, IconChart, IconFabric, IconNumber, IconPerson } from '../compo
  * Receive challans for either trade. A receipt is always booked against an
  * issue challan, and may be partial - the server refuses anything beyond what
  * that challan still owes.
+ *
+ * Both trades carry the same columns and the same form; only the title differs.
  */
 export default function ReceivePage({ kind }) {
   const api = useMemo(() => challans(kind), [kind]);
-  const isEmbroidery = kind === 'embroidery';
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const filterFields = useMemo(
     () =>
@@ -29,10 +33,10 @@ export default function ReceivePage({ kind }) {
         { key: 'masterHead', label: 'Master Head', icon: IconPerson, placeholder: 'Anil Sharma' },
         { key: 'fabric', label: 'Fabric', icon: IconFabric, placeholder: 'Cotton' },
         { key: 'design', label: 'Design', icon: IconChart, placeholder: 'design-07' },
-        isEmbroidery && { key: 'dupatta', label: 'Dupatta', type: 'boolean' },
+        { key: 'dupatta', label: 'Dupatta', type: 'boolean' },
         { key: 'date', label: 'Date', type: 'dateRange' },
-      ].filter(Boolean),
-    [isEmbroidery],
+      ],
+    [],
   );
 
   const allColumns = useMemo(
@@ -41,19 +45,19 @@ export default function ReceivePage({ kind }) {
         { key: 'date', label: 'Date', render: (row) => formatDate(row.date) },
         { key: 'lotNo', label: 'Lot no.' },
         { key: 'challanNo', label: 'Challan no.' },
-        isEmbroidery && { key: 'retailChallanNo', label: 'Retail challan no.' },
+        { key: 'retailChallanNo', label: 'Retail challan no.' },
         { key: 'masterHead', label: 'Master Head' },
         { key: 'fabric', label: 'Fabric' },
         { key: 'design', label: 'Design' },
-        isEmbroidery && { key: 'dupatta', label: 'Dupatta', render: (row) => dupattaLabel(row.dupatta) },
-        isEmbroidery && { key: 'dupQty', label: 'Dup. Qty', align: 'right' },
+        { key: 'dupatta', label: 'Dupatta', render: (row) => dupattaLabel(row.dupatta) },
+        { key: 'dupQty', label: 'Dup. Qty', align: 'right' },
         { key: 'quantity', label: 'Quantity', align: 'right' },
         { key: 'damageLoss', label: 'Damage/Loss', align: 'right' },
         // Rate second to last, amount last.
         { key: 'rate', label: 'Rate', align: 'right' },
         { key: 'amount', label: 'Amount', align: 'right', render: (row) => formatMoney(row.amount) },
-      ].filter(Boolean),
-    [isEmbroidery],
+      ],
+    [],
   );
 
   const fetcher = useCallback((query) => api.listReceives(query), [api]);
@@ -92,10 +96,12 @@ export default function ReceivePage({ kind }) {
     return payload.masters;
   }, []);
 
-  // Damaged and lost pieces come off before the rate is applied.
+  // Mirrors utils/amounts.js: dupatta pieces when there are any, otherwise the
+  // quantity - and damaged or lost pieces come off before the rate is applied.
   const amountPreview = (value) => {
-    const dup = isEmbroidery ? Number(value.dupQty || 0) : 0;
-    const net = dup + Number(value.quantity || 0) - Number(value.damageLoss || 0);
+    const dup = Number(value.dupQty || 0);
+    const pieces = dup > 0 ? dup : Number(value.quantity || 0);
+    const net = pieces - Number(value.damageLoss || 0);
     return formatMoney(Math.max(0, net) * Number(value.rate || 0));
   };
 
@@ -144,7 +150,7 @@ export default function ReceivePage({ kind }) {
           ),
         },
         { key: 'challanNo', label: 'Receive challan no.', icon: IconNumber },
-        isEmbroidery && { key: 'retailChallanNo', label: 'Retail challan no.' },
+        { key: 'retailChallanNo', label: 'Retail challan no.' },
         {
           key: 'masterId',
           type: 'custom',
@@ -173,7 +179,7 @@ export default function ReceivePage({ kind }) {
         { key: 'design', label: 'Design', icon: IconChart, placeholder: 'design-07' },
         { key: 'date', label: 'Date', type: 'date' },
 
-        isEmbroidery && {
+        {
           key: 'dupatta',
           label: 'Dupatta',
           type: 'select',
@@ -184,7 +190,7 @@ export default function ReceivePage({ kind }) {
             { value: 'plain', label: 'Plain' },
           ],
         },
-        isEmbroidery && {
+        {
           key: 'dupQty',
           label: 'Dup. Qty',
           type: 'number',
@@ -218,30 +224,53 @@ export default function ReceivePage({ kind }) {
           ),
         },
       ].filter(Boolean),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isEmbroidery, searchIssues, searchMasters],
+    [searchIssues, searchMasters],
   );
 
-  async function openCreate() {
-    const { challanNo } = await api.nextReceiveNo();
-    page.setEditing({ mode: 'create' });
-    setForm({
-      issueChallanId: '',
-      issueText: '',
-      challanNo,
-      retailChallanNo: '',
-      masterId: '',
-      masterText: '',
-      fabric: '',
-      design: '',
-      date: today(),
-      dupatta: 'yes',
-      dupQty: '',
-      quantity: '',
-      rate: '',
-      damageLoss: '',
-    });
-  }
+  /**
+   * `issue` prefills the form from an issue challan - the Not Received band on
+   * the issue page hands one over, so booking a late receipt is one click
+   * instead of retyping the challan number to find it again.
+   */
+  const openCreate = useCallback(
+    async (issue) => {
+      const { challanNo } = await api.nextReceiveNo();
+      page.setEditing({ mode: 'create' });
+      setForm({
+        issueChallanId: issue?.id ?? '',
+        issueText: issue?.challanNo ?? '',
+        challanNo,
+        retailChallanNo: '',
+        lotId: issue?.lotId,
+        lotNo: issue?.lotNo,
+        masterId: issue?.masterId ?? '',
+        masterText: issue?.masterHead ?? '',
+        fabric: issue?.fabric ?? '',
+        design: issue?.design ?? '',
+        date: today(),
+        dupatta: issue?.dupatta ?? 'yes',
+        dupQty: '',
+        quantity: '',
+        rate: issue ? String(issue.rate ?? '') : '',
+        damageLoss: '',
+        outstandingQty: issue?.outstandingQty,
+        outstandingDup: issue?.outstandingDup,
+      });
+    },
+    // `page.setEditing` is stable; api changes only when the trade does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [api],
+  );
+
+  // Arriving from the Not Received band: open the form for that challan, then
+  // drop the history state so a refresh does not reopen it.
+  const fromIssue = location.state?.fromIssue;
+  useEffect(() => {
+    if (!fromIssue) return;
+    openCreate(fromIssue);
+    navigate(location.pathname, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromIssue]);
 
   function openEdit(row) {
     page.setEditing({ mode: 'edit', id: row.id, challanNo: row.challanNo });
@@ -268,15 +297,15 @@ export default function ReceivePage({ kind }) {
     try {
       const body = {
         challanNo: form.challanNo,
-        retailChallanNo: isEmbroidery ? form.retailChallanNo : '',
+        retailChallanNo: form.retailChallanNo,
         date: form.date,
         issueChallanId: Number(form.issueChallanId),
         lotId: form.lotId ? Number(form.lotId) : null,
         masterId: form.masterId === '' ? null : Number(form.masterId),
         fabric: form.fabric,
         design: form.design,
-        dupatta: isEmbroidery ? form.dupatta : null,
-        dupQty: isEmbroidery ? Number(form.dupQty || 0) : 0,
+        dupatta: form.dupatta,
+        dupQty: Number(form.dupQty || 0),
         quantity: Number(form.quantity || 0),
         rate: Number(form.rate || 0),
         damageLoss: Number(form.damageLoss || 0),
@@ -342,7 +371,7 @@ export default function ReceivePage({ kind }) {
             onClearFilters={page.filters.clear}
             filtersActive={page.filters.active}
           />
-          <button type="button" onClick={openCreate} className="btn-pill">
+          <button type="button" onClick={() => openCreate()} className="btn-pill">
             <IconAdd width={17} height={17} />Receive Challan
           </button>
         </>
@@ -365,7 +394,13 @@ export default function ReceivePage({ kind }) {
           onDelete: remove,
           onHistory: openHistory,
           onShare: page.roles.canShare
-            ? (row) => page.setShare({ kind, direction: 'receive', ids: [row.id] })
+            ? (row) =>
+                page.setShare({
+                  kind,
+                  direction: 'receive',
+                  ids: [row.id],
+                  masterHead: row.masterHead,
+                })
             : undefined,
         }}
       />

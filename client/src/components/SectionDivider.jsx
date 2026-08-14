@@ -6,23 +6,29 @@
  * fills whatever width the column happens to be.
  */
 export default function SectionDivider({ label, collapsed = false, onToggle, count }) {
+  // The whole rule is the target, not just the chevron - it spans the column, so
+  // hunting for a 20px arrow at the far right was the harder way to do it.
   return (
-    <div className="flex select-none items-center gap-[10px] py-[14px] font-mono text-data">
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${label}`}
+      className="flex w-full select-none items-center gap-[10px] py-[14px] text-left font-mono
+                 text-data transition-opacity hover:opacity-70"
+    >
       <Dashes className="w-[42px]" />
       <span className="shrink-0 whitespace-nowrap">{label}</span>
       {count !== undefined && <span className="shrink-0 text-soft">({count})</span>}
       <Dashes className="flex-1" />
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={!collapsed}
-        aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${label}`}
+      <span
+        aria-hidden="true"
         className="shrink-0 px-1 font-bold transition-transform"
         style={{ transform: collapsed ? 'rotate(-90deg)' : 'none' }}
       >
         V
-      </button>
-    </div>
+      </span>
+    </button>
   );
 }
 

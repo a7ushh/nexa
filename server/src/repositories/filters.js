@@ -28,20 +28,29 @@ export class SqlBuilder {
   }
 
   /**
-   * Case-insensitive "contains", skipped when the value is blank.
+   * Case-insensitive match on the *whole* value, skipped when blank.
+   *
+   * Not a "contains": asking for `aayushi 1` used to return `aayushi 12` as
+   * well, because the first is a substring of the second. The filter panel's
+   * fields are fed by the suggestions endpoint, which offers complete existing
+   * values to choose from, so matching the whole value is what the user picked.
+   *
+   * Partial text still works where it is the point - the Master Head, Lot no.
+   * and Challan no. type-aheads on the forms are separate queries and keep
+   * their substring matching.
    *
    * A value may hold several alternatives separated by `/`, e.g.
    * `cotton / micro`, in which case the row matches if *any* of them does.
    */
-  like(column, value) {
+  matches(column, value) {
     if (value === undefined || value === null || String(value).trim() === '') return this;
 
     const terms = splitTerms(value);
     if (terms.length === 0) return this;
-    if (terms.length === 1) return this.add(`${column} ILIKE ?`, `%${terms[0]}%`);
+    if (terms.length === 1) return this.add(`lower(${column}) = lower(?)`, terms[0]);
 
-    const clause = terms.map(() => `${column} ILIKE ?`).join(' OR ');
-    return this.add(`(${clause})`, ...terms.map((term) => `%${term}%`));
+    const clause = terms.map(() => `lower(${column}) = lower(?)`).join(' OR ');
+    return this.add(`(${clause})`, ...terms);
   }
 
   equals(column, value) {
@@ -75,11 +84,11 @@ export class SqlBuilder {
  */
 export function challanFilters(builder, filters = {}, { alias = 'c', masterAlias = 'm' } = {}) {
   builder
-    .like(`l.lot_no`, filters.lotNo)
-    .like(`${alias}.challan_no`, filters.challanNo)
-    .like(`${masterAlias}.name`, filters.masterHead)
-    .like(`${alias}.fabric`, filters.fabric)
-    .like(`${alias}.design`, filters.design)
+    .matches(`l.lot_no`, filters.lotNo)
+    .matches(`${alias}.challan_no`, filters.challanNo)
+    .matches(`${masterAlias}.name`, filters.masterHead)
+    .matches(`${alias}.fabric`, filters.fabric)
+    .matches(`${alias}.design`, filters.design)
     .dateFrom(`${alias}.date`, filters.dateFrom)
     .dateTo(`${alias}.date`, filters.dateTo);
 
@@ -96,10 +105,10 @@ export function challanFilters(builder, filters = {}, { alias = 'c', masterAlias
 /** Filters for the Grey table. */
 export function greyFilters(builder, filters = {}, { alias = 'g', masterAlias = 'm' } = {}) {
   builder
-    .like(`${alias}.lot_no`, filters.lotNo)
-    .like(`${masterAlias}.name`, filters.masterHead)
-    .like(`${alias}.fabric`, filters.fabric)
-    .like(`${alias}.chart`, filters.chart)
+    .matches(`${alias}.lot_no`, filters.lotNo)
+    .matches(`${masterAlias}.name`, filters.masterHead)
+    .matches(`${alias}.fabric`, filters.fabric)
+    .matches(`${alias}.chart`, filters.chart)
     .dateFrom(`${alias}.date`, filters.dateFrom)
     .dateTo(`${alias}.date`, filters.dateTo);
 

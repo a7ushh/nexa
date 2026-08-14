@@ -105,7 +105,7 @@ export default function MobileShell({
       {menuOpen && (
         <div className="absolute inset-0 z-40 flex">
           <nav className="flex w-[280px] max-w-[80%] flex-col bg-navy px-6 py-8 text-on-dark">
-            <p className="text-title tracking-[0.25em]">GRAG</p>
+            <p className="text-title tracking-[0.25em]">NEXA</p>
             <p className="mt-1 text-note text-on-dark/70">{company?.name}</p>
 
             <div className="mt-8 flex flex-col gap-1">

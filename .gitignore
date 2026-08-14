@@ -5,6 +5,7 @@ dist/
 *.log
 backups/
 .DS_Store
+.docx
 
 # Cloudflare tunnel credentials - never commit these
 cloudflared/*.json

@@ -8,6 +8,11 @@ const schema = z.object({
   kind: z.enum(['embroidery', 'handwork']),
   direction: z.enum(['issue', 'receive']),
   ids: z.array(z.coerce.number().int().positive()).min(1),
+  // Printed in place of the stored party for this one document. Blank means
+  // "keep what the record says", so both are optional and may arrive empty.
+  masterHead: z.string().trim().max(120).optional(),
+  masterAddress: z.string().trim().max(300).optional(),
+  masterPhone: z.string().trim().max(60).optional(),
 });
 
 const router = Router();

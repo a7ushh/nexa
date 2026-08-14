@@ -51,7 +51,7 @@ router.post(
 
     const pdf = await renderReport({
       report,
-      meta: { companyName: company?.name ?? 'GARG', filters },
+      meta: { companyName: company?.name ?? 'NEXA', filters },
     });
 
     const stamp = new Date().toISOString().slice(0, 10);

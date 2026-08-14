@@ -27,12 +27,12 @@ const COLUMNS = [
   { key: 'fabric', label: 'Fabric', width: 74, value: (r) => r.fabric },
   { key: 'retailChallanNo', label: 'Retail challan', width: 84, value: (r) => r.retailChallanNo },
   { key: 'dupatta', label: 'Dupatta', width: 74, value: (r) => labelCase(r.dupatta) },
-  { key: 'dupQty', label: 'Dup. Qty', width: 68, value: (r) => num(r.dupQty), align: 'center' },
-  { key: 'quantity', label: 'Quantity', width: 72, value: (r) => num(r.quantity), align: 'center' },
-  { key: 'damageLoss', label: 'Damage/Loss', width: 82, value: (r) => num(r.damageLoss), align: 'center' },
+  { key: 'dupQty', label: 'Dup. Qty', width: 68, value: (r) => num(r.dupQty), align: 'right' },
+  { key: 'quantity', label: 'Quantity', width: 72, value: (r) => num(r.quantity), align: 'right' },
+  { key: 'damageLoss', label: 'Damage/Loss', width: 82, value: (r) => num(r.damageLoss), align: 'right' },
   // steps.md ordering: rate second to last, amount last.
-  { key: 'rate', label: 'Rate', width: 56, value: (r) => num(r.rate), align: 'center' },
-  { key: 'amount', label: 'Amount', width: 84, value: (r) => num(r.amount), align: 'center' },
+  { key: 'rate', label: 'Rate', width: 56, value: (r) => num(r.rate), align: 'right' },
+  { key: 'amount', label: 'Amount', width: 84, value: (r) => num(r.amount), align: 'right' },
 ];
 
 function labelCase(value) {
@@ -93,7 +93,7 @@ export function renderChallan({ rows, meta }) {
 
     y += 22;
     doc.font('Helvetica-Bold').fontSize(17);
-    doc.text(meta.companyName || 'GARG', left, y, { width, align: 'center' });
+    doc.text(meta.companyName || 'NEXA', left, y, { width, align: 'center' });
 
     if (meta.companyAddress) {
       y += 24;
@@ -114,9 +114,22 @@ export function renderChallan({ rows, meta }) {
     doc.font('Helvetica').fontSize(10);
     doc.text(`Party Name - ${meta.masterHead || ''}`, left, y);
     y += 16;
-    doc.text(`Party Address - ${meta.masterAddress || ''}`, left, y);
 
-    y += 20;
+    // Address left, phone right, on one line. The address is width-bounded to
+    // stop a long one running into the number; if it wraps, the block below
+    // moves down with it.
+    const phone = meta.masterPhone ? `Phone - ${meta.masterPhone}` : '';
+    const phoneWidth = phone ? doc.widthOfString(phone) + 12 : 0;
+
+    doc.text(`Party Address - ${meta.masterAddress || ''}`, left, y, {
+      width: width - phoneWidth,
+    });
+    const addressBottom = doc.y;
+
+    if (phone) doc.text(phone, right - phoneWidth, y, { width: phoneWidth, align: 'right' });
+
+    y = Math.max(y + 16, addressBottom);
+    y += 4;
     rule(doc, left, right, y);
 
     // --- challan identity ---------------------------------------------------
@@ -132,32 +145,35 @@ export function renderChallan({ rows, meta }) {
     const total = columns.reduce((sum, column) => sum + column.width, 0);
     const scale = width / total;
     const widths = columns.map((column) => column.width * scale);
-    const rowHeight = 24;
+    // Ruled horizontally only - no column separators and no box per row. The
+    // rules sit under the header and around the Total, so the numbers carry the
+    // structure rather than a grid.
+    const rowHeight = 20;
+    const headerHeight = 30;
 
-    const drawRow = (cells, { bold = false, fill = null } = {}) => {
-      if (fill) doc.rect(left, y, width, rowHeight).fill(fill);
-
+    const drawRow = (cells, { bold = false, height = rowHeight, wrap = false } = {}) => {
       doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor('#000000');
 
       let x = left;
       cells.forEach((cell, index) => {
-        doc.text(String(cell ?? ''), x + 5, y + 8, {
+        doc.text(String(cell ?? ''), x + 5, y + 6, {
           width: widths[index] - 10,
           align: columns[index].align ?? 'left',
-          lineBreak: false,
+          lineBreak: wrap,
         });
-        // vertical separator
-        if (index > 0) {
-          doc.moveTo(x, y).lineTo(x, y + rowHeight).lineWidth(0.7).stroke('#000000');
-        }
         x += widths[index];
       });
 
-      doc.rect(left, y, width, rowHeight).lineWidth(0.7).stroke('#000000');
-      y += rowHeight;
+      y += height;
     };
 
-    drawRow(columns.map((column) => column.label), { bold: true, fill: '#efefef' });
+    // Header: a rule above and below, labels allowed to wrap onto a second line
+    // so a narrow column keeps its full name.
+    rule(doc, left, right, y, 0.8);
+    drawRow(columns.map((column) => column.label), { bold: true, height: headerHeight, wrap: true });
+    rule(doc, left, right, y, 0.8);
+
+    y += 4;
     rows.forEach((row) => drawRow(columns.map((column) => column.value(row))));
 
     // Totals for every numeric column that is on the page.
@@ -170,7 +186,11 @@ export function renderChallan({ rows, meta }) {
       }
       return '';
     });
+
+    y += 4;
+    rule(doc, left, right, y, 0.8);
     drawRow(totalCells, { bold: true });
+    rule(doc, left, right, y, 0.8);
 
     // --- signature ----------------------------------------------------------
     const signTop = y + 44;
@@ -189,6 +209,6 @@ export function renderChallan({ rows, meta }) {
   });
 }
 
-function rule(doc, left, right, y) {
-  doc.moveTo(left, y).lineTo(right, y).lineWidth(1).stroke('#000000');
+function rule(doc, left, right, y, lineWidth = 1) {
+  doc.moveTo(left, y).lineTo(right, y).lineWidth(lineWidth).stroke('#000000');
 }

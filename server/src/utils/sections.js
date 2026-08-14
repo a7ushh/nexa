@@ -1,7 +1,7 @@
 /**
  * Which section a row belongs to. The names match the Figma dividers.
  */
-import { GREY_PAST_AFTER_DAYS, ISSUE_DEADLINE_DAYS } from '../config/constants.js';
+import { ISSUE_DEADLINE_DAYS } from '../config/constants.js';
 
 export const SECTIONS = Object.freeze({
   NOT_RECEIVED: 'not_received',
@@ -16,9 +16,19 @@ export function daysSince(value, now = new Date()) {
   return Math.floor((now.getTime() - then.getTime()) / DAY_MS);
 }
 
-/** Grey: a lot created more than a month ago drops into Past Operation. */
-export function greySection(row, now = new Date()) {
-  return daysSince(row.created_at, now) > GREY_PAST_AFTER_DAYS
+/**
+ * Grey: a lot leaves the floor when it is finished, not when it is old.
+ *
+ * Finished means every piece is back from handwork, or somebody closed the lot
+ * by hand once nothing was outstanding - the usual case for a lot that only ever
+ * went to embroidery. Age is deliberately no longer part of this: a lot is
+ * either done or it is not, however long it has taken.
+ */
+export function greySection(row) {
+  if (row.closed_at) return SECTIONS.PAST;
+
+  const quantity = Number(row.quantity ?? 0);
+  return quantity > 0 && Number(row.hw_received ?? 0) >= quantity
     ? SECTIONS.PAST
     : SECTIONS.IN_PROGRESS;
 }

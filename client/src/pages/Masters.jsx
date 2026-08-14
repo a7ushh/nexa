@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShell from '../layouts/AppShell.jsx';
 import RecordModal from '../components/form/RecordModal.jsx';
 import { masters as mastersApi } from '../api/resources.js';
 import { canDelete } from '../config/navigation.js';
 import { useAuth } from '../hooks/useAuth.jsx';
-import { IconAdd, IconEdit, IconTrash, IconPerson } from '../components/icons.jsx';
+import { IconAdd, IconClose, IconEdit, IconTrash, IconPerson } from '../components/icons.jsx';
 
 /**
  * "Add all the masters that can be selected in the master head field while fill
@@ -36,6 +36,22 @@ export default function Masters() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
+
+  // The list endpoint returns every master with no paging, so this filters what
+  // is already in hand rather than making a round trip per keystroke.
+  //
+  // Substring, unlike the filter panel: here you are looking for a name you
+  // half-remember, so typing part of it has to work.
+  const visible = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter((row) =>
+      [row.name, row.mobile, row.address].some((field) =>
+        String(field ?? '').toLowerCase().includes(term),
+      ),
+    );
+  }, [rows, search]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,10 +109,36 @@ export default function Masters() {
       filters={NO_FILTERS}
       modalOpen={Boolean(editing)}
       toolbar={
-        <button type="button" onClick={openCreate} className="btn-pill">
-          <IconAdd width={17} height={17} />
-          Add Masters
-        </button>
+        <>
+          <div className="field-shell w-[260px]">
+            <span className="field-icon" aria-hidden="true">
+              <IconPerson width={18} height={18} />
+            </span>
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="search name, mobile or address"
+              aria-label="Search masters"
+              className="field-control"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="field-clear"
+              >
+                <IconClose width={16} height={16} />
+              </button>
+            )}
+          </div>
+
+          <button type="button" onClick={openCreate} className="btn-pill">
+            <IconAdd width={17} height={17} />
+            Add Masters
+          </button>
+        </>
       }
     >
       {error && <p className="mb-4 text-data text-danger">{error}</p>}
@@ -106,8 +148,12 @@ export default function Masters() {
         <p className="py-[120px] text-center font-mono text-title">No masters</p>
       )}
 
+      {!loading && rows.length > 0 && visible.length === 0 && (
+        <p className="py-[120px] text-center font-mono text-title">No master matches “{search}”</p>
+      )}
+
       <ul className="grid grid-cols-1 gap-[24px] md:grid-cols-2 xl:grid-cols-3">
-        {rows.map((row) => (
+        {visible.map((row) => (
           <li
             key={row.id}
             className="flex min-h-[180px] flex-col rounded-[10px] border border-edge bg-surface p-[22px]"

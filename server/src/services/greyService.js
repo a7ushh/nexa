@@ -1,6 +1,6 @@
 import * as greyRepository from '../repositories/greyRepository.js';
 import * as recordService from './recordService.js';
-import { toGreyLot, toGreyLots } from '../models/greyLot.js';
+import { closeBlocker, toGreyLot, toGreyLots } from '../models/greyLot.js';
 import { nextLotNo } from '../utils/numbering.js';
 import { LOG_ACTIONS } from '../config/constants.js';
 import { badRequest, notFound } from '../utils/httpError.js';
@@ -12,8 +12,17 @@ export async function list(companyId, filters) {
   return toGreyLots(await greyRepository.list(companyId, filters));
 }
 
-export async function search(companyId, term) {
-  return toGreyLots(await greyRepository.search(companyId, term));
+/**
+ * `kind` makes the type-ahead hint trade-correct: an embroidery form should see
+ * what the lot has left, a handwork form what embroidery has given back.
+ */
+export async function search(companyId, term, kind) {
+  return toGreyLots(await greyRepository.search(companyId, term), { kind });
+}
+
+/** Every challan tied to a lot, for the progress bar's popover. */
+export function flow(companyId, lotId) {
+  return greyRepository.flow(companyId, lotId);
 }
 
 export async function history(companyId, id) {
@@ -105,6 +114,50 @@ export async function remove(req, id) {
 
       await greyRepository.softDelete(client, req.companyId, id, req.user.id);
       return { record: { id: Number(id) }, entityId: Number(id), details: { lotNo: before.lot_no } };
+    },
+  );
+}
+
+/**
+ * Closing a lot by hand.
+ *
+ * A lot normally finishes when everything is back from handwork, but plenty
+ * only ever go to embroidery. Once nothing is outstanding anywhere, somebody can
+ * say so and the lot drops into Past Records - a judgement the data cannot make
+ * for itself.
+ */
+export async function setClosed(req, id, closed) {
+  return recordService.perform(
+    req,
+    { action: LOG_ACTIONS.UPDATE, entity: TABLE },
+    async (client) => {
+      const before = await greyRepository.findById(req.companyId, id, client);
+      if (!before) throw notFound('That lot no longer exists.');
+
+      // Refuse while anything is still moving - the same rule the button uses
+      // to decide whether to appear, enforced here so an API call cannot
+      // bypass it. See closeBlocker in models/greyLot.js.
+      if (closed) {
+        const blocker = closeBlocker(before);
+        if (blocker) throw badRequest(`Lot ${before.lot_no} still has ${blocker}.`);
+      }
+
+      await recordService.snapshot(client, {
+        table: TABLE,
+        id,
+        companyId: req.companyId,
+        row: before,
+        changedBy: req.user.id,
+      });
+
+      await greyRepository.setClosed(client, req.companyId, id, req.user.id, closed);
+      const row = await greyRepository.findById(req.companyId, id, client);
+
+      return {
+        record: toGreyLot(row),
+        entityId: Number(id),
+        details: { lotNo: before.lot_no, closed },
+      };
     },
   );
 }

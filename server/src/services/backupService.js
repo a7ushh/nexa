@@ -15,7 +15,6 @@ import path from 'node:path';
 import { google } from 'googleapis';
 
 import { env } from '../config/env.js';
-import { createOAuthClient } from '../config/google.js';
 import * as userRepository from '../repositories/userRepository.js';
 import * as logService from './logService.js';
 import { LOG_ACTIONS } from '../config/constants.js';
@@ -81,7 +80,22 @@ export async function run(req) {
   try {
     await dumpTo(target);
 
-    const auth = createOAuthClient();
+    // Deliberately googleapis' own OAuth2 client rather than createOAuthClient().
+    //
+    // googleapis 173 ships googleapis-common 8 and gaxios 7, which hand the auth
+    // client a WHATWG `Headers` object. Our direct google-auth-library@9
+    // dependency attaches the token with `headers.Authorization = ...` - a plain
+    // property that `Headers` silently discards - so the upload left here with no
+    // Authorization header at all and Google answered `401 Login Required`.
+    // `google.auth.OAuth2` is the very copy googleapis-common uses to make the
+    // request, so the two cannot drift, and it sets the header properly.
+    //
+    // Sign-in keeps using config/google.js: that path is on v9, it works, and
+    // there is no reason to disturb it for a backup button.
+    const auth = new google.auth.OAuth2({
+      clientId: env.google.clientId,
+      clientSecret: env.google.clientSecret,
+    });
     auth.setCredentials({ refresh_token: refreshToken });
 
     const drive = google.drive({ version: 'v3', auth });

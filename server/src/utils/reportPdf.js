@@ -20,17 +20,49 @@ const GREY_COLUMNS = [
   { key: 'bottom', label: 'Bottom', width: 56 },
 ];
 
-const CHALLAN_COLUMNS = [
-  { key: 'date', label: 'Date', width: 64, format: 'date' },
-  { key: 'lot_no', label: 'Lot no.', width: 66 },
-  { key: 'challan_no', label: 'Challan no.', width: 72 },
-  { key: 'master_head', label: 'Master Head', width: 96 },
-  { key: 'fabric', label: 'Fabric', width: 72 },
-  { key: 'design', label: 'Design', width: 78 },
-  { key: 'quantity', label: 'Quantity', width: 66, align: 'right' },
-  { key: 'rate', label: 'Rate', width: 54, align: 'right' },
-  { key: 'amount', label: 'Amount', width: 78, align: 'right', total: true },
+/**
+ * Every column the module's own table carries. Widths are relative - the
+ * renderer scales them to the page - so what matters is their proportion.
+ * Receive is the widest at thirteen columns, hence the tighter figures.
+ */
+const ISSUE_COLUMNS = [
+  { key: 'date', label: 'Date', width: 58, format: 'date' },
+  { key: 'lot_no', label: 'Lot no.', width: 56 },
+  { key: 'challan_no', label: 'Challan no.', width: 62 },
+  { key: 'master_head', label: 'Master Head', width: 92 },
+  { key: 'fabric', label: 'Fabric', width: 66 },
+  { key: 'design', label: 'Design', width: 70 },
+  { key: 'dupatta', label: 'Dupatta', width: 58 },
+  { key: 'dup_qty', label: 'Dup. Qty', width: 54, align: 'right' },
+  { key: 'quantity', label: 'Quantity', width: 60, align: 'right' },
+  { key: 'rate', label: 'Rate', width: 48, align: 'right' },
+  { key: 'amount', label: 'Amount', width: 72, align: 'right', total: true },
 ];
+
+const RECEIVE_COLUMNS = [
+  { key: 'date', label: 'Date', width: 54, format: 'date' },
+  { key: 'lot_no', label: 'Lot no.', width: 50 },
+  { key: 'challan_no', label: 'Challan no.', width: 56 },
+  // Shortened for print only - thirteen columns on landscape A4 leaves no room
+  // for the full labels, and a clipped "Damage/" reads as nothing at all. The
+  // on-screen table keeps the full names.
+  { key: 'retail_challan_no', label: 'Retail no.', width: 58 },
+  { key: 'master_head', label: 'Master Head', width: 84 },
+  { key: 'fabric', label: 'Fabric', width: 58 },
+  { key: 'design', label: 'Design', width: 62 },
+  { key: 'dupatta', label: 'Dupatta', width: 52 },
+  { key: 'dup_qty', label: 'Dup. Qty', width: 48, align: 'right' },
+  { key: 'quantity', label: 'Quantity', width: 54, align: 'right' },
+  { key: 'rate', label: 'Rate', width: 44, align: 'right' },
+  { key: 'damage_loss', label: 'Dmg/Loss', width: 56, align: 'right' },
+  { key: 'amount', label: 'Amount', width: 66, align: 'right', total: true },
+];
+
+/** Section keys are `grey`, `<trade>Issue` and `<trade>Receive`. */
+function columnsFor(key) {
+  if (key === 'grey') return GREY_COLUMNS;
+  return key.endsWith('Receive') ? RECEIVE_COLUMNS : ISSUE_COLUMNS;
+}
 
 function formatDate(value) {
   if (!value) return '';
@@ -83,7 +115,7 @@ export function renderReport({ report, meta }) {
     doc.text('REPORT', left, MARGIN + 18, { width, align: 'center' });
 
     doc.font('Helvetica-Bold').fontSize(16);
-    doc.text(meta.companyName || 'GARG', left, MARGIN + 38, { width, align: 'center' });
+    doc.text(meta.companyName || 'NEXA', left, MARGIN + 38, { width, align: 'center' });
 
     doc.font('Helvetica').fontSize(9);
     doc.text(describeFilters(meta.filters), left, MARGIN + 60, { width, align: 'center' });
@@ -100,7 +132,7 @@ export function renderReport({ report, meta }) {
     };
 
     for (const section of report.sections) {
-      const columns = section.key === 'grey' ? GREY_COLUMNS : CHALLAN_COLUMNS;
+      const columns = columnsFor(section.key);
       const total = columns.reduce((sum, column) => sum + column.width, 0);
       const scale = width / total;
       const widths = columns.map((column) => column.width * scale);
@@ -155,13 +187,9 @@ export function renderReport({ report, meta }) {
       y += 18;
     }
 
-    if (y + 26 > bottomLimit) newPage();
-    doc.font('Helvetica-Bold').fontSize(11);
-    doc.text(`Grand total  ${money(report.grandTotal)}`, left, y + 6, {
-      width,
-      align: 'right',
-    });
-
+    // No roll-up across sections: the sections total different things - grey
+    // counts pieces, the challan sections count money - so one figure spanning
+    // them would be meaningless.
     doc.end();
   });
 }

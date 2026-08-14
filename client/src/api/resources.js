@@ -28,8 +28,13 @@ export const masters = {
 
 export const grey = {
   list: (filters) => api.get(`/grey${toQuery(filters)}`),
-  search: (term) => api.get(`/grey/search?q=${encodeURIComponent(term)}`),
+  // `kind` makes the remaining-quantity hint trade-correct: handwork draws on
+  // what embroidery gave back, not on the lot total.
+  search: (term, kind) => api.get(`/grey/search${toQuery({ q: term, kind })}`),
   history: (id) => api.get(`/grey/${id}/history`),
+  flow: (id) => api.get(`/grey/${id}/flow`),
+  close: (id) => api.post(`/grey/${id}/close`),
+  reopen: (id) => api.delete(`/grey/${id}/close`),
   create: (body) => api.post('/grey', body),
   update: (id, body) => api.put(`/grey/${id}`, body),
   remove: (id) => api.delete(`/grey/${id}`),
@@ -42,6 +47,7 @@ export const challans = (kind) => ({
   searchIssues: (term) => api.get(`/${kind}/issues/search?q=${encodeURIComponent(term)}`),
   nextIssueNo: () => api.get(`/${kind}/issues/next-no`),
   issueHistory: (id) => api.get(`/${kind}/issues/${id}/history`),
+  issueReceipts: (id) => api.get(`/${kind}/issues/${id}/receipts`),
   createIssue: (body) => api.post(`/${kind}/issues`, body),
   updateIssue: (id, body) => api.put(`/${kind}/issues/${id}`, body),
   removeIssue: (id) => api.delete(`/${kind}/issues/${id}`),
@@ -84,9 +90,26 @@ export const logs = {
 /**
  * Generates a challan PDF. Returns a Blob plus the filename the server chose,
  * so the caller can download it or hand it to the Web Share API.
+ *
+ * `masterHead` and `masterAddress` override the party printed on this one
+ * document; omit them to keep whatever the record holds.
  */
-export async function generateChallan({ kind, direction, ids }) {
-  return fetchPdf('/api/challans', { kind, direction, ids });
+export async function generateChallan({
+  kind,
+  direction,
+  ids,
+  masterHead,
+  masterAddress,
+  masterPhone,
+}) {
+  return fetchPdf('/api/challans', {
+    kind,
+    direction,
+    ids,
+    ...(masterHead ? { masterHead } : {}),
+    ...(masterAddress ? { masterAddress } : {}),
+    ...(masterPhone ? { masterPhone } : {}),
+  });
 }
 
 /** POSTs a body and returns the PDF blob plus the filename the server chose. */

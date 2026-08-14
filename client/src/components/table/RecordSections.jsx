@@ -48,6 +48,7 @@ export default function RecordSections({ sections, columns, cardTitle, actions, 
                       onEdit={() => actions.onEdit(row)}
                       onDelete={() => actions.onDelete(row)}
                       onShare={actions.onShare ? () => actions.onShare(row) : undefined}
+                      onOpen={actions.onRowClick ? () => actions.onRowClick(row) : undefined}
                       canDelete={roles.canDelete}
                       canShare={roles.canShare}
                     />
@@ -64,6 +65,7 @@ export default function RecordSections({ sections, columns, cardTitle, actions, 
                   onDelete={actions.onDelete}
                   onShare={actions.onShare}
                   onHistory={actions.onHistory}
+                  onRowClick={actions.onRowClick}
                   canDelete={roles.canDelete}
                   canShare={roles.canShare}
                 />

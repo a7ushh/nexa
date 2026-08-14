@@ -11,7 +11,7 @@ const ISSUE_SELECT = `
   SELECT c.id, c.company_id, c.kind, c.challan_no, c.date, c.lot_id, l.lot_no,
          c.master_id, m.name AS master_head, c.fabric, c.design, c.dupatta,
          c.dup_qty, c.quantity, c.rate, c.amount, c.created_at, c.updated_at,
-         (c.quantity + CASE WHEN c.kind = 'handwork' THEN 0 ELSE c.dup_qty END) AS issued_pieces,
+         (c.quantity + c.dup_qty) AS issued_pieces,
          COALESCE(r.received_qty, 0) + COALESCE(r.received_dup, 0) AS received_pieces,
          COALESCE(r.received_qty, 0) AS received_qty,
          COALESCE(r.received_dup, 0) AS received_dup,
@@ -22,7 +22,7 @@ const ISSUE_SELECT = `
     LEFT JOIN masters m   ON m.id = c.master_id
     LEFT JOIN LATERAL (
       SELECT SUM(quantity) AS received_qty,
-             SUM(CASE WHEN c.kind = 'handwork' THEN 0 ELSE dup_qty END) AS received_dup
+             SUM(dup_qty) AS received_dup
         FROM receive_challans rc
        WHERE rc.issue_challan_id = c.id AND rc.deleted_at IS NULL
     ) r ON true
@@ -34,7 +34,7 @@ const RECEIVE_SELECT = `
          c.lot_id, l.lot_no, c.master_id, m.name AS master_head,
          c.fabric, c.design, c.dupatta, c.dup_qty, c.quantity, c.rate,
          c.damage_loss, c.amount, c.created_at, c.updated_at,
-         (ic.quantity + CASE WHEN c.kind = 'handwork' THEN 0 ELSE ic.dup_qty END) AS issued_pieces,
+         (ic.quantity + ic.dup_qty) AS issued_pieces,
          COALESCE(agg.received_qty, 0) + COALESCE(agg.received_dup, 0) AS received_pieces,
          (SELECT COUNT(*) FROM record_revisions rr
            WHERE rr.table_name = 'receive_challans' AND rr.record_id = c.id) AS revision_count
@@ -44,7 +44,7 @@ const RECEIVE_SELECT = `
     LEFT JOIN masters m         ON m.id = c.master_id
     LEFT JOIN LATERAL (
       SELECT SUM(quantity) AS received_qty,
-             SUM(CASE WHEN c.kind = 'handwork' THEN 0 ELSE dup_qty END) AS received_dup
+             SUM(dup_qty) AS received_dup
         FROM receive_challans rc
        WHERE rc.issue_challan_id = c.issue_challan_id AND rc.deleted_at IS NULL
     ) agg ON true
@@ -152,6 +152,24 @@ export async function softDelete(client, direction, companyId, kind, id, userId)
     [id, companyId, kind, userId],
   );
   return rows[0]?.id ?? null;
+}
+
+/**
+ * Every receipt booked against one issue challan, for the panel that opens when
+ * a row on the issue page is clicked.
+ */
+export async function receiptsFor(companyId, kind, issueId) {
+  const { rows } = await query(
+    `SELECT r.id, r.challan_no, r.retail_challan_no, r.date, r.dup_qty, r.quantity,
+            r.damage_loss, r.amount, m.name AS master_head
+       FROM receive_challans r
+       LEFT JOIN masters m ON m.id = r.master_id
+      WHERE r.issue_challan_id = $1 AND r.company_id = $2 AND r.kind = $3
+        AND r.deleted_at IS NULL
+      ORDER BY r.date, r.id`,
+    [issueId, companyId, kind],
+  );
+  return rows;
 }
 
 /** Receipts booked against an issue - it cannot be deleted while any exist. */

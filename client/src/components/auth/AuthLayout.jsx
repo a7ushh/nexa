@@ -1,7 +1,7 @@
 import Wordmark from '../Wordmark.jsx';
 
 /**
- * Shared chrome for the sign-in screens: `GARG / <page>` top left, then either
+ * Shared chrome for the sign-in screens: `NEXA / <page>` top left, then either
  * a centred white card (login, access denied) or the large white sheet with its
  * big top-left radius that the profile and company frames use.
  */
@@ -33,13 +33,7 @@ export default function AuthLayout({ page, variant = 'card', footer, children })
         </div>
       )}
 
-      <div className="relative z-10 pb-[22px] pt-[30px] text-center">
-        {footer}
-        {/* Breathing room between the sign-out link and the credit line. */}
-        <p className={`font-mono text-data ${footer ? 'mt-[26px]' : ''}`}>
-          @developed by Ayush Sinha
-        </p>
-      </div>
+      <div className="relative z-10 pb-[22px] pt-[30px] text-center">{footer}</div>
     </div>
   );
 }

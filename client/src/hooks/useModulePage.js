@@ -3,6 +3,7 @@ import { useFilters } from './useFilters.js';
 import { useRecords } from './useRecords.js';
 import { canDelete as roleCanDelete, canShare as roleCanShare } from '../config/navigation.js';
 import { useAuth } from './useAuth.jsx';
+import { useIsMobile } from './useIsMobile.js';
 
 /**
  * The state every module page shares: filters, rows, row selection, visible
@@ -10,6 +11,7 @@ import { useAuth } from './useAuth.jsx';
  */
 export function useModulePage({ filterFields, allColumns, fetcher }) {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const filters = useFilters(filterFields);
 
   const fetch = useCallback((query) => fetcher(query), [fetcher]);
@@ -23,12 +25,16 @@ export function useModulePage({ filterFields, allColumns, fetcher }) {
   const [actionError, setActionError] = useState('');
 
   // "if nothing is selected then display the all columns"
+  //
+  // Mobile always shows every column: the Columns pill is hidden there, so a
+  // selection made on desktop and then carried across the breakpoint by a
+  // resize would otherwise be stuck with no way to undo it.
   const columns = useMemo(
     () =>
-      visibleColumns.length === 0
+      isMobile || visibleColumns.length === 0
         ? allColumns
         : allColumns.filter((column) => visibleColumns.includes(column.key)),
-    [allColumns, visibleColumns],
+    [allColumns, visibleColumns, isMobile],
   );
 
   const toggle = useCallback((id) => {

@@ -21,6 +21,7 @@ export function createChallanRouter(page) {
   router.get('/issues/search', challanController.searchIssues);
   router.get('/issues/next-no', challanController.nextIssueNo);
   router.get('/issues/:id/history', challanController.issueHistory);
+  router.get('/issues/:id/receipts', challanController.issueReceipts);
   router.post('/issues', challanController.createIssue);
   router.put('/issues/:id', challanController.updateIssue);
   router.delete('/issues/bulk', requirePrivileged, challanController.removeIssues);

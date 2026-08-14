@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth.jsx';
 
 /**
  * The navbar from the new design: one row of Raleway SemiBold 26px items after
- * `GARG /`, the active item underlined, and a section's Issue / Receive
+ * `NEXA /`, the active item underlined, and a section's Issue / Receive
  * sub-options on a second line directly beneath their parent - still inside the
  * same 118px bar, as steps.md requires.
  */

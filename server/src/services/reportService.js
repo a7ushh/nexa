@@ -11,6 +11,7 @@ const empty = { rows: [], total: 0 };
  * than shown empty, and its totals do not reach the grand total.
  *
  * The grey section totals pieces; the four challan sections total amount.
+ * Each section stands alone - there is no grand total across them.
  */
 export async function build(companyId, filters = {}) {
   const wantEmbroidery = filters.includeEmbroidery !== false;
@@ -46,12 +47,8 @@ export async function build(companyId, filters = {}) {
     );
   }
 
-  return {
-    sections,
-    grandTotal:
-      embroideryIssue.total +
-      embroideryReceive.total +
-      handworkIssue.total +
-      handworkReceive.total,
-  };
+  // Each section carries its own total. There is deliberately no roll-up across
+  // them: grey totals pieces while the challan sections total money, so a single
+  // figure spanning the lot would be adding unlike things.
+  return { sections };
 }

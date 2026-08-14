@@ -13,11 +13,11 @@ import { SqlBuilder } from './filters.js';
 const SHARED_FILTERS = ['lotNo', 'challanNo', 'masterHead', 'fabric', 'dateFrom', 'dateTo'];
 
 function applyShared(builder, filters, { lotColumn, challanColumn, alias, masterAlias = 'm' }) {
-  builder.like(lotColumn, filters.lotNo);
-  if (challanColumn) builder.like(challanColumn, filters.challanNo);
+  builder.matches(lotColumn, filters.lotNo);
+  if (challanColumn) builder.matches(challanColumn, filters.challanNo);
   builder
-    .like(`${masterAlias}.name`, filters.masterHead)
-    .like(`${alias}.fabric`, filters.fabric)
+    .matches(`${masterAlias}.name`, filters.masterHead)
+    .matches(`${alias}.fabric`, filters.fabric)
     .dateFrom(`${alias}.date`, filters.dateFrom)
     .dateTo(`${alias}.date`, filters.dateTo);
   return builder;

@@ -4,7 +4,7 @@ import { toIssueChallan, toIssueChallans, toReceiveChallan, toReceiveChallans } 
 import { issueAmount, receiveAmount } from '../utils/amounts.js';
 import { nextChallanNo, nextReceiveChallanNo } from '../utils/numbering.js';
 import { assertIssueWithinLot, assertReceiveWithinIssue } from '../utils/quantities.js';
-import { LOG_ACTIONS, WORK_KINDS } from '../config/constants.js';
+import { LOG_ACTIONS } from '../config/constants.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 import { withTransaction } from '../config/db.js';
 
@@ -40,18 +40,28 @@ export async function issueHistory(companyId, kind, id) {
   });
 }
 
+/** The receipts against one issue challan, with what it still owes. */
+export async function issueReceipts(companyId, kind, id) {
+  const issue = await challanRepository.findById('issue', companyId, kind, id);
+  if (!issue) throw notFound('That challan no longer exists.');
+
+  return {
+    challan: toIssueChallan(issue),
+    receipts: await challanRepository.receiptsFor(companyId, kind, id),
+  };
+}
+
 export async function createIssue(req, kind, data) {
   return recordService.perform(
     req,
     { action: LOG_ACTIONS.CREATE, entity: ISSUE_TABLE },
     async (client) => {
-      // Handwork has no dupatta at all.
-      const dupQty = kind === WORK_KINDS.HANDWORK ? 0 : data.dupQty;
-      const dupatta = kind === WORK_KINDS.HANDWORK ? null : data.dupatta;
+      const { dupQty, dupatta } = data;
 
       await assertIssueWithinLot(client, {
         companyId: req.companyId,
         lotId: data.lotId,
+        kind,
         quantity: data.quantity,
         dupQty,
       });
@@ -82,13 +92,13 @@ export async function updateIssue(req, kind, id, data) {
       const before = await challanRepository.findById('issue', req.companyId, kind, id, client);
       if (!before) throw notFound('That challan no longer exists.');
 
-      const dupQty = kind === WORK_KINDS.HANDWORK ? 0 : data.dupQty;
-      const dupatta = kind === WORK_KINDS.HANDWORK ? null : data.dupatta;
+      const { dupQty, dupatta } = data;
 
       // The row being edited is excluded so its own pieces do not count twice.
       await assertIssueWithinLot(client, {
         companyId: req.companyId,
         lotId: data.lotId,
+        kind,
         quantity: data.quantity,
         dupQty,
         excludeIssueId: id,
@@ -180,7 +190,7 @@ export async function createReceive(req, kind, data) {
     req,
     { action: LOG_ACTIONS.CREATE, entity: RECEIVE_TABLE },
     async (client) => {
-      const dupQty = kind === WORK_KINDS.HANDWORK ? 0 : data.dupQty;
+      const { dupQty } = data;
 
       const state = await assertReceiveWithinIssue(client, {
         companyId: req.companyId,
@@ -202,7 +212,7 @@ export async function createReceive(req, kind, data) {
         ...data,
         challanNo,
         dupQty,
-        dupatta: kind === WORK_KINDS.HANDWORK ? null : data.dupatta ?? state.issue.dupatta,
+        dupatta: data.dupatta ?? state.issue.dupatta,
         lotId: data.lotId ?? Number(state.issue.lot_id),
         amount,
         userId: req.user.id,
@@ -222,7 +232,7 @@ export async function updateReceive(req, kind, id, data) {
       const before = await challanRepository.findById('receive', req.companyId, kind, id, client);
       if (!before) throw notFound('That receipt no longer exists.');
 
-      const dupQty = kind === WORK_KINDS.HANDWORK ? 0 : data.dupQty;
+      const { dupQty } = data;
 
       await assertReceiveWithinIssue(client, {
         companyId: req.companyId,
@@ -251,7 +261,7 @@ export async function updateReceive(req, kind, id, data) {
       await challanRepository.updateReceive(client, req.companyId, kind, id, {
         ...data,
         dupQty,
-        dupatta: kind === WORK_KINDS.HANDWORK ? null : data.dupatta,
+        dupatta: data.dupatta,
         amount,
         userId: req.user.id,
       });

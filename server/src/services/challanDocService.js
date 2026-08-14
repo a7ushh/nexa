@@ -12,7 +12,10 @@ import { renderChallan, challanLabel } from '../utils/challanPdf.js';
 import { LOG_ACTIONS } from '../config/constants.js';
 import { badRequest, notFound } from '../utils/httpError.js';
 
-export async function generate(req, { kind, direction, ids }) {
+export async function generate(
+  req,
+  { kind, direction, ids, masterHead, masterAddress, masterPhone },
+) {
   const mapper = direction === 'receive' ? toReceiveChallan : toIssueChallan;
 
   const rows = [];
@@ -32,18 +35,25 @@ export async function generate(req, { kind, direction, ids }) {
     ? await masterRepository.findById(req.companyId, head.masterId)
     : null;
 
+  // A blank override is falsy, so an untouched field falls straight back to the
+  // stored party with no extra branching.
+  const printedHead = masterHead || head.masterHead;
+  const printedAddress = masterAddress || master?.address || '';
+  const printedPhone = masterPhone || master?.mobile || '';
+
   const pdf = await renderChallan({
     rows,
     meta: {
-      companyName: company?.name ?? 'GARG',
+      companyName: company?.name ?? 'NEXA',
       companyAddress: company?.address ?? '',
       companyPhone: company?.phone ?? '',
       kind,
       direction,
       challanNo: head.challanNo,
       date: head.date,
-      masterHead: head.masterHead,
-      masterAddress: master?.address ?? '',
+      masterHead: printedHead,
+      masterAddress: printedAddress,
+      masterPhone: printedPhone,
     },
   });
 
@@ -51,7 +61,15 @@ export async function generate(req, { kind, direction, ids }) {
     action: LOG_ACTIONS.SHARE,
     entity: direction === 'receive' ? 'receive_challans' : 'issue_challans',
     entityId: head.id,
-    details: { kind, count: rows.length, challanNo: head.challanNo },
+    details: {
+      kind,
+      count: rows.length,
+      challanNo: head.challanNo,
+      // Worth recording: the document did not print the stored party.
+      ...(masterHead ? { overrodeMasterHead: masterHead } : {}),
+      ...(masterAddress ? { overrodeMasterAddress: masterAddress } : {}),
+      ...(masterPhone ? { overrodeMasterPhone: masterPhone } : {}),
+    },
   });
 
   return { pdf, filename: `${challanLabel(kind, head.challanNo)}.pdf` };

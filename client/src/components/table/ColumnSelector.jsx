@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconColumns } from '../icons.jsx';
+import { useIsMobile } from '../../hooks/useIsMobile.js';
 
 /**
  * The COLUMNS pill and its dropdown.
@@ -7,6 +8,10 @@ import { IconColumns } from '../icons.jsx';
  * steps.md: "Only display the selected columns and if nothing is selected then
  * display the all columns" and "Add a clear filter button inside column
  * selector" - hence Clear filter living in this menu.
+ *
+ * Desktop only. The Android layout renders record cards rather than a table, so
+ * there are no columns to pick, and its filter sheet carries its own Clear
+ * Filters button - so nothing here is stranded by hiding it.
  */
 export default function ColumnSelector({
   columns,
@@ -16,6 +21,7 @@ export default function ColumnSelector({
   filtersActive,
   label = 'Columns',
 }) {
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const container = useRef(null);
 
@@ -31,6 +37,9 @@ export default function ColumnSelector({
   const toggle = (key) => {
     onChange(visible.includes(key) ? visible.filter((item) => item !== key) : [...visible, key]);
   };
+
+  // After every hook, so the hook order stays constant across the breakpoint.
+  if (isMobile) return null;
 
   return (
     <div ref={container} className="relative">

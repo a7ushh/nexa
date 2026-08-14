@@ -15,6 +15,7 @@ export default function MobileRecordCard({
   canDelete,
   canShare,
   title,
+  onOpen,
 }) {
   return (
     <article className="mb-[14px] rounded-[10px] border border-edge bg-surface p-[16px]">
@@ -29,10 +30,23 @@ export default function MobileRecordCard({
         />
       </div>
 
-      <dl className="mt-3 space-y-[6px]">
+      {/* Tapping the body opens the row; the action icons below keep theirs. */}
+      <dl className="mt-3 space-y-[6px]" onClick={onOpen}>
         {columns.map((column) => {
           const value = column.render ? column.render(row) : row[column.key];
           if (value === null || value === undefined || value === '') return null;
+
+          // A cell that is itself a widget - the lot progress bar - needs the
+          // full card width rather than being squeezed beside its label.
+          if (column.block) {
+            return (
+              <div key={column.key} className="pt-1 text-data">
+                <dt className="mb-1 text-soft">{column.label}</dt>
+                <dd>{value}</dd>
+              </div>
+            );
+          }
+
           return (
             <div key={column.key} className="flex gap-2 text-data">
               <dt className="text-soft">{column.label} -</dt>

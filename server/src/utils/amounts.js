@@ -2,15 +2,12 @@
  * Amount arithmetic. Always computed on the server - the client shows a live
  * preview but never decides the stored value.
  *
- *   issue   : (dup_qty + quantity) * rate
- *   receive : (dup_qty + quantity - damage_loss) * rate
+ *   issue   : (dup_qty or quantity) * rate
+ *   receive : ((dup_qty or quantity) - damage_loss) * rate
  *
- * Handwork has no dupatta, so dup_qty plays no part there. On an embroidery
- * challan the two are mutually exclusive: a dupatta challan carries dup_qty and
- * no quantity, a garment challan the other way round, so the sum is simply
- * "the pieces this challan covers".
+ * Both trades carry dupatta, and a challan is one thing or the other: a dupatta
+ * challan bills its dupatta pieces, a garment challan its quantity.
  */
-import { WORK_KINDS } from '../config/constants.js';
 
 const round2 = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
@@ -19,17 +16,23 @@ const num = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-/** Pieces a challan covers. */
-export function billablePieces({ kind, dupQty, quantity }) {
-  return kind === WORK_KINDS.HANDWORK ? num(quantity) : num(dupQty) + num(quantity);
+/**
+ * Pieces a challan bills for.
+ *
+ * A challan is either a dupatta challan or a garment challan, so the two are an
+ * either/or rather than a sum: dupatta wins whenever it is set. A garment
+ * quantity entered alongside a dupatta quantity is therefore not billed.
+ */
+export function billablePieces({ dupQty, quantity }) {
+  return num(dupQty) > 0 ? num(dupQty) : num(quantity);
 }
 
-export function issueAmount({ kind, dupQty, quantity, rate }) {
-  return round2(billablePieces({ kind, dupQty, quantity }) * num(rate));
+export function issueAmount({ dupQty, quantity, rate }) {
+  return round2(billablePieces({ dupQty, quantity }) * num(rate));
 }
 
 /** Damaged and lost pieces are not billable, so they come off before the rate. */
-export function receiveAmount({ kind, dupQty, quantity, rate, damageLoss }) {
-  const net = billablePieces({ kind, dupQty, quantity }) - num(damageLoss);
+export function receiveAmount({ dupQty, quantity, rate, damageLoss }) {
+  const net = billablePieces({ dupQty, quantity }) - num(damageLoss);
   return round2(Math.max(0, net) * num(rate));
 }

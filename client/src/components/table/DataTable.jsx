@@ -25,6 +25,7 @@ export default function DataTable({
   onDelete,
   onShare,
   onHistory,
+  onRowClick,
   canDelete,
   canShare,
   emptyText = 'No records',
@@ -38,11 +39,14 @@ export default function DataTable({
     if (!column) return rows;
 
     // Sort on the raw value, not the rendered string, so numbers and dates
-    // order correctly rather than alphabetically.
+    // order correctly rather than alphabetically. A column whose cell is not a
+    // plain field - the lot progress bar, say - supplies `sortValue` instead.
+    const valueOf = column.sortValue ?? ((row) => row[sort.key]);
+
     const copy = [...rows];
     copy.sort((a, b) => {
-      const left = a[sort.key];
-      const right = b[sort.key];
+      const left = valueOf(a);
+      const right = valueOf(b);
       if (left === right) return 0;
       if (left === null || left === undefined || left === '') return 1;
       if (right === null || right === undefined || right === '') return -1;
@@ -79,7 +83,7 @@ export default function DataTable({
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px] border-collapse text-data">
           <thead>
-            <tr className="bg-table-head text-left">
+            <tr className="bg-navy text-left text-on-dark">
               <th className="w-[44px] px-4 py-[11px]">
                 <input
                   type="checkbox"
@@ -88,7 +92,8 @@ export default function DataTable({
                   onChange={() =>
                     onToggleAll(allSelected ? [] : visible.map((row) => row.id))
                   }
-                  className="h-[15px] w-[15px] accent-navy"
+                  // accent-navy would be navy-on-navy once ticked.
+                  className="h-[15px] w-[15px] accent-accent"
                 />
               </th>
               <th className="w-[58px] px-2 py-[11px] font-medium">Sr no.</th>
@@ -127,8 +132,16 @@ export default function DataTable({
                   {current * PAGE_SIZE + index + 1}
                 </td>
 
+                {/* Only the data cells open the row - the checkbox and the
+                    action menu keep their own jobs. */}
                 {columns.map((column) => (
-                  <td key={column.key} className={`px-3 py-[10px] align-middle ${alignOf(column)}`}>
+                  <td
+                    key={column.key}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    className={`px-3 py-[10px] align-middle ${alignOf(column)} ${
+                      onRowClick ? 'cursor-pointer' : ''
+                    }`}
+                  >
                     {column.render ? column.render(row) : formatCell(row[column.key])}
                     {column.key === columns[0].key && row.revisionCount > 0 && (
                       <RevisionTrail count={row.revisionCount} onOpen={() => onHistory?.(row)} />
@@ -164,10 +177,11 @@ export default function DataTable({
 }
 
 function SortMark({ active, direction }) {
+  // The head is navy now, so these read against it rather than against white.
   return (
     <span
       aria-hidden="true"
-      className={`text-[9px] leading-none ${active ? 'text-ink_text' : 'text-soft/60'}`}
+      className={`text-[9px] leading-none ${active ? 'text-on-dark' : 'text-on-dark/50'}`}
     >
       {active ? (direction === 'asc' ? '▲' : '▼') : '⇅'}
     </span>

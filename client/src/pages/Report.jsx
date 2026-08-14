@@ -32,22 +32,45 @@ const SECTION_COLUMNS = {
     ['dupatta', 'Dupatta'],
     ['bottom', 'Bottom'],
   ],
-  challan: [
+  issue: [
     ['date', 'Date', formatDate],
     ['lot_no', 'Lot no.'],
     ['challan_no', 'Challan no.'],
     ['master_head', 'Master Head'],
     ['fabric', 'Fabric'],
     ['design', 'Design'],
+    ['dupatta', 'Dupatta'],
+    ['dup_qty', 'Dup. Qty', null, 'right'],
     ['quantity', 'Quantity', null, 'right'],
     ['rate', 'Rate', null, 'right'],
     ['amount', 'Amount', formatMoney, 'right'],
   ],
+  receive: [
+    ['date', 'Date', formatDate],
+    ['lot_no', 'Lot no.'],
+    ['challan_no', 'Challan no.'],
+    ['retail_challan_no', 'Retail challan no.'],
+    ['master_head', 'Master Head'],
+    ['fabric', 'Fabric'],
+    ['design', 'Design'],
+    ['dupatta', 'Dupatta'],
+    ['dup_qty', 'Dup. Qty', null, 'right'],
+    ['quantity', 'Quantity', null, 'right'],
+    ['rate', 'Rate', null, 'right'],
+    ['damage_loss', 'Damage/Loss', null, 'right'],
+    ['amount', 'Amount', formatMoney, 'right'],
+  ],
+};
+
+/** Section keys are `grey`, `<trade>Issue` and `<trade>Receive`. */
+const columnsFor = (key) => {
+  if (key === 'grey') return SECTION_COLUMNS.grey;
+  return key.endsWith('Receive') ? SECTION_COLUMNS.receive : SECTION_COLUMNS.issue;
 };
 
 export default function Report() {
   const filters = useFilters(FILTER_FIELDS);
-  const [data, setData] = useState({ sections: [], grandTotal: 0 });
+  const [data, setData] = useState({ sections: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [share, setShare] = useState(null);
@@ -93,7 +116,7 @@ export default function Report() {
 
       <div className="space-y-6">
         {data.sections.map((section) => {
-          const columns = section.key === 'grey' ? SECTION_COLUMNS.grey : SECTION_COLUMNS.challan;
+          const columns = columnsFor(section.key);
 
           return (
             <section key={section.key}>
@@ -105,7 +128,7 @@ export default function Report() {
                 <div className="overflow-x-auto rounded-[10px] border border-edge bg-surface">
                   <table className="w-full min-w-[860px] border-collapse text-note">
                     <thead>
-                      <tr className="bg-table-head text-left">
+                      <tr className="bg-navy text-left text-on-dark">
                         {columns.map(([field, label, , align]) => (
                           <th
                             key={field}
@@ -135,7 +158,7 @@ export default function Report() {
                       ))}
 
                       {/* "with a last row add as total- in each table" */}
-                      <tr className="bg-table-head font-semibold">
+                      <tr className="bg-navy font-semibold text-on-dark">
                         <td className="px-2 py-2" colSpan={columns.length - 1}>
                           {section.totalLabel}
                         </td>
@@ -150,11 +173,6 @@ export default function Report() {
         })}
       </div>
 
-      {data.sections.length > 0 && (
-        <p className="mt-8 text-right text-title">
-          Grand total — {formatMoney(data.grandTotal)}
-        </p>
-      )}
       <ShareSheet request={share} onClose={() => setShare(null)} />
     </AppShell>
   );
