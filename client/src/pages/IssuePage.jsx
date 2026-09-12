@@ -218,12 +218,14 @@ export default function IssuePage({ kind }) {
             />
           ),
         },
-        { key: 'fabric', label: 'Fabric', icon: IconFabric, placeholder: 'Cotton', hidden: onlyDup },
-        { key: 'design', label: 'Design', icon: IconChart, placeholder: 'design-07', hidden: onlyDup },
+        { key: 'fabric', label: 'Fabric', icon: IconFabric, placeholder: 'Cotton' },
+        { key: 'design', label: 'Design', icon: IconChart, placeholder: 'design-07' },
         { key: 'date', label: 'Date', type: 'date' },
 
-        // A dupatta-only challan carries no garment at all: no fabric, no
-        // design, no quantity - just dupatta pieces at a rate.
+        // A dupatta-only challan bills dupatta pieces alone - no garment
+        // quantity. Fabric and design stay on the form either way: they
+        // describe the goods however the challan is billed, and the printed
+        // challan carries both columns.
         { key: 'onlyDupatta', label: 'Only Dupatta', type: 'boolean' },
 
         // "dupatta= if no is selected then select whether diamond or chain or
@@ -313,10 +315,11 @@ export default function IssuePage({ kind }) {
       fabric: row.fabric,
       design: row.design,
       date: row.date,
-      // The mode is not stored - it is exactly the shape a dupatta-only
-      // challan leaves behind, so it reconstructs from the row itself.
-      onlyDupatta:
-        row.dupatta === 'yes' && !row.fabric && !row.design && Number(row.quantity) === 0,
+      // The mode is not stored - it reconstructs from the shape a dupatta-only
+      // challan leaves behind. Fabric and design are no longer part of that
+      // shape now they are kept, so the tell is a dupatta challan billing no
+      // garment quantity.
+      onlyDupatta: row.dupatta === 'yes' && Number(row.quantity) === 0,
       dupattaYes: row.dupatta === 'yes',
       dupatta: row.dupatta === 'yes' ? 'diamond' : (row.dupatta ?? 'diamond'),
       dupQty: String(row.dupQty ?? ''),
@@ -328,8 +331,8 @@ export default function IssuePage({ kind }) {
   const submit = async () => {
     setBusy(true);
     try {
-      // A dupatta-only challan stores fabric, design and quantity as empty, so
-      // the table shows blanks and the amount is dupatta pieces alone.
+      // A dupatta-only challan stores quantity as 0, so the amount is dupatta
+      // pieces alone. Fabric and design are recorded whichever way it bills.
       const dupattaOnly = onlyDup(form);
 
       const body = {
@@ -337,8 +340,8 @@ export default function IssuePage({ kind }) {
         date: form.date,
         lotId: Number(form.lotId),
         masterId: form.masterId === '' ? null : Number(form.masterId),
-        fabric: dupattaOnly ? '' : form.fabric,
-        design: dupattaOnly ? '' : form.design,
+        fabric: form.fabric,
+        design: form.design,
         dupatta: dupattaOn(form) ? 'yes' : form.dupatta,
         dupQty: dupattaOn(form) ? Number(form.dupQty || 0) : 0,
         quantity: dupattaOnly ? 0 : Number(form.quantity || 0),
@@ -442,7 +445,7 @@ export default function IssuePage({ kind }) {
           onHistory: openHistory,
           onRowClick: openReceipts,
           onShare: page.roles.canShare
-            ? (row) =>
+            ? (row, intent) =>
                 // masterHead only fills the override placeholder, so the sheet
                 // can show what would be printed if the field is left blank.
                 page.setShare({
@@ -450,6 +453,7 @@ export default function IssuePage({ kind }) {
                   direction: 'issue',
                   ids: [row.id],
                   masterHead: row.masterHead,
+                  intent,
                 })
             : undefined,
         }}
@@ -460,7 +464,9 @@ export default function IssuePage({ kind }) {
         canDelete={page.roles.canDelete}
         canShare={page.roles.canShare}
         onDelete={removeSelected}
-        onShare={() => page.setShare({ kind, direction: 'issue', ids: page.selected })}
+        onShare={(intent) =>
+          page.setShare({ kind, direction: 'issue', ids: page.selected, intent })
+        }
         onClear={page.clearSelection}
       />
 

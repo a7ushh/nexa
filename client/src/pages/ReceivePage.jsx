@@ -394,12 +394,13 @@ export default function ReceivePage({ kind }) {
           onDelete: remove,
           onHistory: openHistory,
           onShare: page.roles.canShare
-            ? (row) =>
+            ? (row, intent) =>
                 page.setShare({
                   kind,
                   direction: 'receive',
                   ids: [row.id],
                   masterHead: row.masterHead,
+                  intent,
                 })
             : undefined,
         }}
@@ -410,7 +411,9 @@ export default function ReceivePage({ kind }) {
         canDelete={page.roles.canDelete}
         canShare={page.roles.canShare}
         onDelete={removeSelected}
-        onShare={() => page.setShare({ kind, direction: 'receive', ids: page.selected })}
+        onShare={(intent) =>
+          page.setShare({ kind, direction: 'receive', ids: page.selected, intent })
+        }
         onClear={page.clearSelection}
       />
 

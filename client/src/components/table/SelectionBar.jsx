@@ -1,8 +1,11 @@
-import { IconShare, IconTrash } from '../icons.jsx';
+import { IconShare, IconTrash, IconPrinter } from '../icons.jsx';
 
 /**
  * steps.md: "When checkbox of a row is selected then appear to button to
  * multi-share and multi-delete."
+ *
+ * `onShare` takes the intent ('print' | 'share') so both buttons can share one
+ * handler - see RowMenu for why it is one prop rather than two.
  */
 export default function SelectionBar({ count, onShare, onDelete, onClear, canShare, canDelete }) {
   if (count === 0) return null;
@@ -16,10 +19,25 @@ export default function SelectionBar({ count, onShare, onDelete, onClear, canSha
       <span className="text-data">{count} selected</span>
 
       {canShare && (
-        <button type="button" onClick={onShare} className="btn-ghost h-[30px] px-4 text-on-dark">
-          <IconShare width={15} height={15} />
-          Share
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => onShare('print')}
+            className="btn-ghost h-[30px] px-4 text-on-dark"
+          >
+            <IconPrinter width={15} height={15} />
+            Print
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onShare('share')}
+            className="btn-ghost h-[30px] px-4 text-on-dark"
+          >
+            <IconShare width={15} height={15} />
+            Share
+          </button>
+        </>
       )}
 
       {canDelete && (

@@ -16,8 +16,8 @@
 # cloudflared finds it by itself - never in this repository.
 # ---------------------------------------------------------------------------
 
-tunnel: 555d042d-4256-49d1-a1a7-0778ed3c12bc
-credentials-file: C:\Users\HP\.cloudflared\555d042d-4256-49d1-a1a7-0778ed3c12bc.json
+tunnel: 413ddf3b-9c3f-4ee0-886c-62dc33c5323c
+credentials-file: C:\Users\Admin\.cloudflared\413ddf3b-9c3f-4ee0-886c-62dc33c5323c.json
 
 # No `credentials-file` on purpose: cloudflared resolves
 # %USERPROFILE%\.cloudflared\<UUID>.json on its own. Hardcoding an absolute user

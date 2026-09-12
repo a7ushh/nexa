@@ -20,6 +20,30 @@ import { WORK_KINDS, serverAssetsDir } from '../config/constants.js';
 const MARGIN = 34;
 const SIGNATURE = path.join(serverAssetsDir, 'signature.png');
 
+/**
+ * Type scale for the printed challan, raised from the original 9-17pt set: it
+ * read well on screen but came out small on paper in the hand. Every vertical
+ * step below is sized against these, so spacing stays proportional if they move.
+ */
+const FONT = {
+  heading: 16,
+  company: 21,
+  letterhead: 11.5,
+  party: 12,
+  table: 11,
+  signature: 11,
+};
+
+const ROW_HEIGHT = 25;
+const HEADER_HEIGHT = 36;
+
+/** Gap from the Total rule down to the signature, and the signature block itself. */
+const SIGN_GAP = 30;
+const SIGN_BLOCK = 66;
+
+/** What the Total row and everything under it needs, so the break can plan for it. */
+const TAIL_HEIGHT = 4 + ROW_HEIGHT + SIGN_GAP + SIGN_BLOCK + 6;
+
 /** Columns in print order; `value` returns '' when there is nothing to show. */
 const COLUMNS = [
   { key: 'lotNo', label: 'Lot no.', width: 74, value: (r) => r.lotNo },
@@ -79,41 +103,41 @@ export function renderChallan({ rows, meta }) {
     const width = right - left;
 
     // --- outer page border --------------------------------------------------
-    doc
-      .rect(MARGIN, MARGIN, doc.page.width - MARGIN * 2, doc.page.height - MARGIN * 2)
-      .lineWidth(1.2)
-      .stroke('#000000');
+    pageBorder(doc);
 
     let y = MARGIN + 24;
 
     // --- letterhead ---------------------------------------------------------
     const heading = meta.direction === 'receive' ? 'RECEIVE CHALLAN' : 'ISSUE CHALLAN';
-    doc.font('Helvetica-Bold').fontSize(13).fillColor('#000000');
+    doc.font('Helvetica-Bold').fontSize(FONT.heading).fillColor('#000000');
     doc.text(heading, left, y, { width, align: 'center' });
 
-    y += 22;
-    doc.font('Helvetica-Bold').fontSize(17);
+    y += 26;
+    doc.font('Helvetica-Bold').fontSize(FONT.company);
     doc.text(meta.companyName || 'NEXA', left, y, { width, align: 'center' });
 
     if (meta.companyAddress) {
-      y += 24;
-      doc.font('Helvetica').fontSize(9.5);
+      y += 29;
+      doc.font('Helvetica').fontSize(FONT.letterhead);
       doc.text(meta.companyAddress, left, y, { width, align: 'center' });
     }
     if (meta.companyPhone) {
-      y += 14;
-      doc.font('Helvetica').fontSize(9.5);
+      y += 17;
+      doc.font('Helvetica').fontSize(FONT.letterhead);
       doc.text(meta.companyPhone, left, y, { width, align: 'center' });
     }
 
-    y += 26;
+    y += 30;
     rule(doc, left, right, y);
 
     // --- party --------------------------------------------------------------
-    y += 16;
-    doc.font('Helvetica').fontSize(10);
-    doc.text(`Party Name - ${meta.masterHead || ''}`, left, y);
-    y += 16;
+    y += 19;
+    doc.font('Helvetica').fontSize(FONT.party);
+    // Width-bounded like the address below. Left unbounded, pdfkit wraps at the
+    // page margin - which is where the box border is drawn - so a long name ran
+    // into the rule instead of stopping inside it.
+    doc.text(`Party Name - ${meta.masterHead || ''}`, left, y, { width });
+    y = Math.max(y + 19, doc.y);
 
     // Address left, phone right, on one line. The address is width-bounded to
     // stop a long one running into the number; if it wraps, the block below
@@ -128,17 +152,17 @@ export function renderChallan({ rows, meta }) {
 
     if (phone) doc.text(phone, right - phoneWidth, y, { width: phoneWidth, align: 'right' });
 
-    y = Math.max(y + 16, addressBottom);
-    y += 4;
+    y = Math.max(y + 19, addressBottom);
+    y += 5;
     rule(doc, left, right, y);
 
     // --- challan identity ---------------------------------------------------
-    y += 16;
-    doc.text(`Challan No. - ${meta.challanNo} (${tradeLetter(meta.kind)})`, left, y);
-    y += 16;
-    doc.text(`Challan Date - ${formatDate(meta.date)}`, left, y);
+    y += 19;
+    doc.text(`Challan No. - ${meta.challanNo} (${tradeLetter(meta.kind)})`, left, y, { width });
+    y += 19;
+    doc.text(`Challan Date - ${formatDate(meta.date)}`, left, y, { width });
 
-    y += 26;
+    y += 28;
 
     // --- table --------------------------------------------------------------
     const columns = visibleColumns(rows);
@@ -148,33 +172,74 @@ export function renderChallan({ rows, meta }) {
     // Ruled horizontally only - no column separators and no box per row. The
     // rules sit under the header and around the Total, so the numbers carry the
     // structure rather than a grid.
-    const rowHeight = 20;
-    const headerHeight = 30;
+    //
+    // Cells wrap inside their column and the row takes the height of its
+    // tallest one. With a fixed row height a value longer than its column was
+    // drawn straight over the row below - easy to hit now the type is larger,
+    // and it lost the very content the challan exists to carry.
+    const CELL_PADDING = 12;
 
-    const drawRow = (cells, { bold = false, height = rowHeight, wrap = false } = {}) => {
-      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor('#000000');
+    const rowHeightFor = (cells, bold, minimum) => {
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(FONT.table);
+      return Math.max(
+        minimum,
+        ...cells.map(
+          (cell, index) =>
+            doc.heightOfString(String(cell ?? ''), { width: widths[index] - 10 }) + CELL_PADDING,
+        ),
+      );
+    };
+
+    const drawRow = (cells, { bold = false, height } = {}) => {
+      const step = height ?? rowHeightFor(cells, bold, ROW_HEIGHT);
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(FONT.table).fillColor('#000000');
 
       let x = left;
       cells.forEach((cell, index) => {
-        doc.text(String(cell ?? ''), x + 5, y + 6, {
+        doc.text(String(cell ?? ''), x + 5, y + 7, {
           width: widths[index] - 10,
           align: columns[index].align ?? 'left',
-          lineBreak: wrap,
         });
         x += widths[index];
       });
 
-      y += height;
+      y += step;
     };
 
     // Header: a rule above and below, labels allowed to wrap onto a second line
     // so a narrow column keeps its full name.
-    rule(doc, left, right, y, 0.8);
-    drawRow(columns.map((column) => column.label), { bold: true, height: headerHeight, wrap: true });
-    rule(doc, left, right, y, 0.8);
+    const drawHeader = () => {
+      const labels = columns.map((column) => column.label);
+      rule(doc, left, right, y, 0.8);
+      drawRow(labels, { bold: true, height: rowHeightFor(labels, true, HEADER_HEIGHT) });
+      rule(doc, left, right, y, 0.8);
+      y += 4;
+    };
 
-    y += 4;
-    rows.forEach((row) => drawRow(columns.map((column) => column.value(row))));
+    drawHeader();
+
+    // Rows used to run straight off the foot of the page. At the old type size
+    // that was rare enough to go unnoticed; at this one a long challan reaches
+    // the bottom, and a row drawn past it is simply lost.
+    //
+    // Rows fill the page to the border. The Total and signature that follow are
+    // checked separately rather than reserved on every page, so a long challan
+    // does not give up a row per page for a block that only lands on the last.
+    const pageBottom = doc.page.height - MARGIN;
+
+    const nextPage = () => {
+      doc.addPage();
+      pageBorder(doc);
+      y = MARGIN + 24;
+      drawHeader();
+    };
+
+    rows.forEach((row) => {
+      const cells = columns.map((column) => column.value(row));
+      const step = rowHeightFor(cells, false, ROW_HEIGHT);
+      if (y + step > pageBottom - 12) nextPage();
+      drawRow(cells, { height: step });
+    });
 
     // Totals for every numeric column that is on the page.
     const sum = (key) => rows.reduce((acc, row) => acc + Number(row[key] || 0), 0);
@@ -187,13 +252,15 @@ export function renderChallan({ rows, meta }) {
       return '';
     });
 
+    if (y + TAIL_HEIGHT > pageBottom) nextPage();
+
     y += 4;
     rule(doc, left, right, y, 0.8);
     drawRow(totalCells, { bold: true });
     rule(doc, left, right, y, 0.8);
 
     // --- signature ----------------------------------------------------------
-    const signTop = y + 44;
+    const signTop = y + SIGN_GAP;
     if (fs.existsSync(SIGNATURE)) {
       try {
         doc.image(SIGNATURE, right - 130, signTop, { fit: [120, 46] });
@@ -202,11 +269,21 @@ export function renderChallan({ rows, meta }) {
       }
     }
 
-    doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#000000');
-    doc.text('Authorised Signatory', right - 150, signTop + 52, { width: 150, align: 'right' });
+    doc.font('Helvetica-Bold').fontSize(FONT.signature).fillColor('#000000');
+    doc.text('Authorised Signatory', right - 150, signTop + SIGN_BLOCK - 14, {
+      width: 150,
+      align: 'right',
+    });
 
     doc.end();
   });
+}
+
+function pageBorder(doc) {
+  doc
+    .rect(MARGIN, MARGIN, doc.page.width - MARGIN * 2, doc.page.height - MARGIN * 2)
+    .lineWidth(1.2)
+    .stroke('#000000');
 }
 
 function rule(doc, left, right, y, lineWidth = 1) {

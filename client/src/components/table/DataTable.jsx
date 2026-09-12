@@ -154,7 +154,7 @@ export default function DataTable({
                     label={`row ${current * PAGE_SIZE + index + 1}`}
                     onEdit={() => onEdit(row)}
                     onDelete={() => onDelete(row)}
-                    onShare={onShare ? () => onShare(row) : undefined}
+                    onShare={onShare ? (intent) => onShare(row, intent) : undefined}
                     canDelete={canDelete}
                     canShare={canShare}
                   />

@@ -1,4 +1,4 @@
-import { IconEdit, IconTrash, IconShare } from '../icons.jsx';
+import { IconEdit, IconTrash, IconShare, IconPrinter } from '../icons.jsx';
 
 /**
  * The record card the Android layout uses in place of a table row, carried over
@@ -58,9 +58,24 @@ export default function MobileRecordCard({
 
       <div className="mt-4 flex justify-end gap-[12px]">
         {canShare && onShare && (
-          <button type="button" onClick={onShare} aria-label="Share" className="btn-icon">
-            <IconShare width={17} height={17} />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => onShare('print')}
+              aria-label="Print"
+              className="btn-icon"
+            >
+              <IconPrinter width={17} height={17} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onShare('share')}
+              aria-label="Share"
+              className="btn-icon"
+            >
+              <IconShare width={17} height={17} />
+            </button>
+          </>
         )}
         <button type="button" onClick={onEdit} aria-label="Edit" className="btn-icon">
           <IconEdit width={17} height={17} />

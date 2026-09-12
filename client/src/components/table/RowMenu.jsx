@@ -1,19 +1,23 @@
 import { useRef, useState } from 'react';
 import Popover from '../Popover.jsx';
-import { IconEdit, IconTrash, IconShare } from '../icons.jsx';
+import { IconEdit, IconTrash, IconShare, IconPrinter } from '../icons.jsx';
 
 /**
  * The per-row action menu from the reference table: a vertical ellipsis that
- * opens Share / Edit / Delete. Rendered through Popover so it is never clipped
- * by the table's own scroll container.
+ * opens Print / Share / Edit / Delete. Rendered through Popover so it is never
+ * clipped by the table's own scroll container.
+ *
+ * Print and Share are one callback, not two: both open the same sheet and only
+ * differ in what it does once the document exists, so the intent rides along as
+ * the argument rather than doubling every prop on the way down.
  */
 export default function RowMenu({ onEdit, onDelete, onShare, canDelete, canShare, label }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
 
-  const run = (action) => () => {
+  const run = (action, ...args) => () => {
     setOpen(false);
-    action();
+    action(...args);
   };
 
   return (
@@ -35,9 +39,14 @@ export default function RowMenu({ onEdit, onDelete, onShare, canDelete, canShare
       <Popover anchorRef={anchor} open={open} onClose={() => setOpen(false)} width={168} align="right">
         <div role="menu" className="py-1">
           {canShare && onShare && (
-            <MenuItem icon={IconShare} onClick={run(onShare)}>
-              Share
-            </MenuItem>
+            <>
+              <MenuItem icon={IconPrinter} onClick={run(onShare, 'print')}>
+                Print
+              </MenuItem>
+              <MenuItem icon={IconShare} onClick={run(onShare, 'share')}>
+                Share
+              </MenuItem>
+            </>
           )}
           <MenuItem icon={IconEdit} onClick={run(onEdit)}>
             Edit

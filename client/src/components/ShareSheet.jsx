@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { generateChallan, generateReport } from '../api/resources.js';
 
 /**
  * steps.md: "When clicked on share button is open a full stretch box that asked
  * the user whether to download or share directly."
+ *
+ * Split since: the caller chooses Print or Share before the sheet opens and
+ * passes it as `request.intent`, so the sheet only asks who the challan is made
+ * out to and then performs that one action. The buttons under "ready" are the
+ * manual retry - a browser may refuse a print or a share it did not see the
+ * user click directly, and a dead end there would leave no way to the document.
  *
  * Not drawn in Figma, so it is built from the same tokens: a full-width navy
  * sheet across the foot of the page.
@@ -15,13 +21,43 @@ export default function ShareSheet({ request, onClose }) {
   // A challan asks who it is being made out to before it is generated; a report
   // has no party, so it skips straight to the document.
   const isReport = request?.kind === 'report';
+  const intent = request?.intent === 'print' ? 'print' : 'share';
   const [party, setParty] = useState({ masterHead: '', masterAddress: '', masterPhone: '' });
   const [confirmed, setConfirmed] = useState(false);
 
-  // A fresh share always re-asks, and never inherits the last one's answers.
+  // Fires the chosen action exactly once per generated document, so a re-render
+  // does not reopen the print dialog on top of itself.
+  const [delivered, setDelivered] = useState(false);
+
+  // The print frame outlives the call that made it: a PDF detached from the DOM
+  // while the print dialog is still open cancels the job in Chrome, so it stays
+  // attached until the sheet closes.
+  const frameRef = useRef(null);
+
+  const dropFrame = () => {
+    if (frameRef.current) {
+      frameRef.current.remove();
+      frameRef.current = null;
+    }
+  };
+
+  useEffect(() => dropFrame, []);
+
+  // A fresh request always re-asks, and never inherits the last one's answers.
+  // Closing the sheet lands here too (request goes null), which is where the
+  // previous print frame has to go: the effect below revokes the blob URL it
+  // points at, and the component itself never unmounts.
   useEffect(() => {
+    dropFrame();
+    // `state` has to go back to idle with the rest. The effect below nulls
+    // `doc` on close but leaves the status alone, so without this the next
+    // share opens straight into the "ready" branch with nothing to show -
+    // which threw on doc.filename and, with no error boundary anywhere in the
+    // app, took the whole page white.
+    setState({ status: 'idle', error: '' });
     setParty({ masterHead: '', masterAddress: '', masterPhone: '' });
     setConfirmed(false);
+    setDelivered(false);
   }, [request]);
 
   useEffect(() => {
@@ -52,14 +88,44 @@ export default function ShareSheet({ request, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request, isReport, confirmed]);
 
-  if (!request) return null;
-
   const download = () => {
     const link = document.createElement('a');
     link.href = doc.url;
     link.download = doc.filename;
     link.click();
     onClose();
+  };
+
+  const openTab = () => {
+    window.open(doc.url, '_blank', 'noopener');
+  };
+
+  /**
+   * Printing goes through a hidden frame rather than a new tab: the generated
+   * PDF arrives well after the click that asked for it, and a window.open() that
+   * late is what popup blockers exist to stop. The frame is same-origin (a blob
+   * URL), so its print() reaches the browser's own PDF viewer.
+   */
+  const print = () => {
+    dropFrame();
+
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    frame.src = doc.url;
+    frame.onload = () => {
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch {
+        // Some browsers refuse print() on an embedded PDF viewer. The tab is the
+        // fallback: the viewer's own print button still works there.
+        openTab();
+      }
+    };
+
+    document.body.appendChild(frame);
+    frameRef.current = frame;
   };
 
   const share = async () => {
@@ -78,12 +144,27 @@ export default function ShareSheet({ request, onClose }) {
     download();
   };
 
+  // The document is ready, so run the action the caller asked for. Everything
+  // below this point is recovery, not the normal path.
+  useEffect(() => {
+    if (state.status !== 'ready' || !doc || delivered) return;
+    setDelivered(true);
+    if (intent === 'print') print();
+    else share();
+    // One shot per document; adding the handlers here would re-fire them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status, doc, delivered, intent]);
+
+  if (!request) return null;
+
+  const verb = intent === 'print' ? 'print' : 'share';
+
   return (
     <div className="absolute inset-x-0 bottom-0 z-50">
       <div
         className="w-full bg-navy px-8 py-7 text-on-dark shadow-md"
         role="dialog"
-        aria-label="Share document"
+        aria-label={intent === 'print' ? 'Print document' : 'Share document'}
       >
         <div className="mx-auto flex max-w-[900px] flex-col items-center gap-5 text-center">
           {!isReport && !confirmed && (
@@ -140,7 +221,7 @@ export default function ShareSheet({ request, onClose }) {
                   onClick={() => setConfirmed(true)}
                   className="h-[40px] rounded-[8px] bg-card-accent px-6 text-data text-ink_text"
                 >
-                  Continue
+                  {intent === 'print' ? 'Continue to print' : 'Continue to share'}
                 </button>
                 <button type="button" onClick={onClose} className="text-data underline">
                   Cancel
@@ -161,14 +242,32 @@ export default function ShareSheet({ request, onClose }) {
             </>
           )}
 
-          {state.status === 'ready' && (
+          {state.status === 'ready' && doc && (
             <>
               <p className="text-title">{doc.filename}</p>
               <p className="text-data text-on-dark/80">
-                Download it, or share it straight from here.
+                {intent === 'print'
+                  ? 'The print dialog should be open. If nothing happened, use a button below.'
+                  : 'Sharing… if nothing happened, use a button below.'}
               </p>
 
               <div className="flex flex-wrap items-center justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={intent === 'print' ? print : share}
+                  className="h-[40px] rounded-[8px] bg-card-accent px-6 text-data text-ink_text"
+                >
+                  {intent === 'print' ? 'Print again' : 'Share again'}
+                </button>
+                {intent === 'print' && (
+                  <button
+                    type="button"
+                    onClick={openTab}
+                    className="h-[40px] rounded-[8px] bg-surface px-6 text-data text-ink_text"
+                  >
+                    Open in new tab
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={download}
@@ -176,17 +275,14 @@ export default function ShareSheet({ request, onClose }) {
                 >
                   Download
                 </button>
-                <button
-                  type="button"
-                  onClick={share}
-                  className="h-[40px] rounded-[8px] bg-card-accent px-6 text-data text-ink_text"
-                >
-                  Share directly
-                </button>
                 <button type="button" onClick={onClose} className="text-data underline">
-                  Cancel
+                  Done
                 </button>
               </div>
+
+              <span className="sr-only" role="status">
+                Document ready to {verb}.
+              </span>
             </>
           )}
         </div>

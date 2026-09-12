@@ -15,6 +15,7 @@ export { default as IconChevronRight } from '~icons/feather/chevron-right';
 export { default as IconFileText } from '~icons/feather/file-text';
 export { default as IconInfo } from '~icons/feather/info';
 export { default as IconShare } from '~icons/feather/share-2';
+export { default as IconPrinter } from '~icons/feather/printer';
 export { default as IconDownload } from '~icons/feather/download';
 export { default as IconRefresh } from '~icons/feather/refresh-cw';
 export { default as IconCalendar } from '~icons/feather/calendar';

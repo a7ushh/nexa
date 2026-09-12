@@ -5,7 +5,7 @@ import { reports } from '../api/resources.js';
 import { useFilters } from '../hooks/useFilters.js';
 import ShareSheet from '../components/ShareSheet.jsx';
 import { formatDate, formatMoney } from '../utils/format.js';
-import { IconFabric, IconNumber, IconPerson, IconShare } from '../components/icons.jsx';
+import { IconFabric, IconNumber, IconPerson, IconShare, IconPrinter } from '../components/icons.jsx';
 
 /** steps.md "Report" filter list. */
 const FILTER_FIELDS = [
@@ -100,15 +100,26 @@ export default function Report() {
       filters={filters}
       suggestScope="report"
       toolbar={
-        <button
-          type="button"
-          onClick={() => setShare({ kind: 'report', filters: filters.query })}
-          disabled={loading || data.sections.length === 0}
-          className="btn-pill"
-        >
-          <IconShare width={16} height={16} />
-          Export PDF
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => setShare({ kind: 'report', filters: filters.query, intent: 'print' })}
+            disabled={loading || data.sections.length === 0}
+            className="btn-pill"
+          >
+            <IconPrinter width={16} height={16} />
+            Print
+          </button>
+          <button
+            type="button"
+            onClick={() => setShare({ kind: 'report', filters: filters.query, intent: 'share' })}
+            disabled={loading || data.sections.length === 0}
+            className="btn-pill"
+          >
+            <IconShare width={16} height={16} />
+            Share
+          </button>
+        </>
       }
     >
       {error && <p className="mb-4 text-data text-danger">{error}</p>}
