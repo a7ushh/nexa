@@ -63,18 +63,6 @@ export async function setProfile(id, { username, pinHash }) {
   return rows[0] ?? null;
 }
 
-export async function setRefreshToken(id, refreshToken) {
-  await query('UPDATE users SET refresh_token = $2, updated_at = now() WHERE id = $1', [
-    id,
-    refreshToken,
-  ]);
-}
-
-export async function getRefreshToken(id) {
-  const { rows } = await query('SELECT refresh_token FROM users WHERE id = $1', [id]);
-  return rows[0]?.refresh_token ?? null;
-}
-
 export async function touchLastAccess(id) {
   await query('UPDATE users SET last_access_at = now() WHERE id = $1', [id]);
 }

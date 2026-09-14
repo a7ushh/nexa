@@ -4,8 +4,21 @@
  * steps.md: "There is a button is called backup is user page- it backup the
  * database into google drive using google API."
  *
- * pg_dump writes a compressed dump to a temp file, the file is uploaded with
- * the signer's own Drive credentials, then the temp file is removed.
+ * Drive permission is asked for on every backup, and the token it produces is
+ * used once and discarded. Pressing Backup sends root through Google's consent
+ * screen; the callback parks a short-lived access token on the session
+ * (authService.grantDriveForBackup); this takes it off the session before doing
+ * anything else, then runs pg_dump and uploads the file. The token is never
+ * written anywhere else, and Google expires it within the hour.
+ *
+ * It is deliberately NOT revoked at Google afterwards. Revoking withdraws the
+ * app's Drive authorisation itself, so on the next backup Google's consent
+ * screen shows Drive as a new, unticked checkbox - and Continue without ticking
+ * it returns a token with no Drive access. That is what made every backup after
+ * the first one fail.
+ *
+ * No Drive credential is written to the database, so there is nothing left to
+ * go stale or leak from a log.
  */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -15,7 +28,6 @@ import path from 'node:path';
 import { google } from 'googleapis';
 
 import { env } from '../config/env.js';
-import * as userRepository from '../repositories/userRepository.js';
 import * as logService from './logService.js';
 import { LOG_ACTIONS } from '../config/constants.js';
 import { badRequest } from '../utils/httpError.js';
@@ -61,15 +73,34 @@ function dumpTo(target) {
   });
 }
 
+/**
+ * Removes the grant from the session and saves that immediately, before any
+ * slow work starts - so a second click arriving while this dump is still
+ * running finds nothing to reuse.
+ */
+async function takeDriveGrant(req) {
+  const grant = req.session.driveGrant ?? null;
+  delete req.session.driveGrant;
+  await new Promise((resolve, reject) =>
+    req.session.save((error) => (error ? reject(error) : resolve())),
+  );
+  return grant;
+}
+
 export async function run(req) {
   if (!env.google.configured) {
     throw badRequest('Google is not configured, so backups cannot be uploaded.');
   }
 
-  const refreshToken = await userRepository.getRefreshToken(req.user.id);
-  if (!refreshToken) {
-    // Drive is not part of sign-in, so the first backup needs a one-off grant.
-    const error = badRequest('Google Drive is not connected yet.');
+  const grant = await takeDriveGrant(req);
+
+  const usable =
+    grant && grant.userId === Number(req.user.id) && Date.now() <= Number(grant.expiresAt);
+
+  if (!usable) {
+    const error = badRequest(
+      'Google Drive permission is asked for on every backup. Press Backup to grant it.',
+    );
     error.details = { needsDrive: true };
     throw error;
   }
@@ -89,14 +120,13 @@ export async function run(req) {
     // Authorization header at all and Google answered `401 Login Required`.
     // `google.auth.OAuth2` is the very copy googleapis-common uses to make the
     // request, so the two cannot drift, and it sets the header properly.
-    //
-    // Sign-in keeps using config/google.js: that path is on v9, it works, and
-    // there is no reason to disturb it for a backup button.
     const auth = new google.auth.OAuth2({
       clientId: env.google.clientId,
       clientSecret: env.google.clientSecret,
     });
-    auth.setCredentials({ refresh_token: refreshToken });
+    // An access token only - there is no refresh token to fall back on, which
+    // is the point.
+    auth.setCredentials({ access_token: grant.accessToken });
 
     const drive = google.drive({ version: 'v3', auth });
     const { data } = await drive.files.create({

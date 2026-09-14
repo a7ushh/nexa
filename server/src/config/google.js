@@ -5,13 +5,12 @@ import { redirectUriProblem as checkRedirectUri } from '../utils/urls.js';
 /**
  * Scopes.
  *
- * Sign-in asks for identity only. `drive.file` is a *sensitive* scope: asking
- * for it up front makes Google show every user the Drive consent panel and the
- * "Google hasn't verified this app" interstitial, even though only the root
- * user ever runs a backup.
+ * Sign-in asks for identity only. Drive is requested on its own, by root alone,
+ * every time a backup is taken - so ordinary sign-in never mentions Drive, and
+ * no Drive token outlives the backup it was issued for.
  *
- * So Drive is requested separately, on demand, by root alone - Google calls
- * this incremental authorisation.
+ * `drive.file` is a non-sensitive scope: it reaches only files this app creates,
+ * so it needs no Google verification.
  */
 export const SIGN_IN_SCOPES = [
   'openid',
@@ -49,20 +48,26 @@ export function createOAuthClient() {
 /**
  * Consent-screen URL. `state` guards against forged callbacks.
  *
- * Pass `includeDrive` only for the root user's explicit "connect Drive" step;
- * ordinary sign-in never asks for it.
+ * Always `access_type: 'online'`: nothing keeps a refresh token any more. Sign-in
+ * only needs to learn who the user is, and a backup uses its access token once
+ * and then discards it (services/backupService.js).
+ *
+ * `include_granted_scopes` is off so a sign-in token never silently carries a
+ * Drive grant from an earlier backup.
+ *
+ * `includeDrive` forces the consent screen, so each backup is an explicit,
+ * visible grant. `loginHint` preselects root's own account on that screen.
  */
-export function buildAuthUrl(state, { includeDrive = false } = {}) {
+export function buildAuthUrl(state, { includeDrive = false, loginHint } = {}) {
   const scope = includeDrive ? [...SIGN_IN_SCOPES, DRIVE_SCOPE] : SIGN_IN_SCOPES;
 
   return createOAuthClient().generateAuthUrl({
-    access_type: 'offline',
-    // Only force the consent screen when we need a refresh token for Drive;
-    // a plain sign-in should be a single click for a returning user.
+    access_type: 'online',
     prompt: includeDrive ? 'consent' : 'select_account',
     scope,
-    include_granted_scopes: true,
+    include_granted_scopes: false,
     state,
+    ...(loginHint ? { login_hint: loginHint } : {}),
   });
 }
 
@@ -85,8 +90,8 @@ export async function exchangeCode(code) {
       picture: payload.picture || null,
       emailVerified: payload.email_verified === true,
     },
-    refreshToken: tokens.refresh_token || null,
-    // Present only when the Drive scope was granted.
+    accessToken: tokens.access_token || null,
+    expiresAt: tokens.expiry_date || null,
     grantedScopes: tokens.scope ? tokens.scope.split(' ') : [],
   };
 }

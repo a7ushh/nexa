@@ -32,6 +32,7 @@ export default function ReceivePage({ kind }) {
         { key: 'challanNo', label: 'Challan no.', icon: IconNumber, placeholder: '15' },
         { key: 'masterHead', label: 'Master Head', icon: IconPerson, placeholder: 'Anil Sharma' },
         { key: 'fabric', label: 'Fabric', icon: IconFabric, placeholder: 'Cotton' },
+        { key: 'chart', label: 'Chart', icon: IconChart, placeholder: 'chart-12' },
         { key: 'design', label: 'Design', icon: IconChart, placeholder: 'design-07' },
         { key: 'dupatta', label: 'Dupatta', type: 'boolean' },
         { key: 'date', label: 'Date', type: 'dateRange' },
@@ -48,6 +49,7 @@ export default function ReceivePage({ kind }) {
         { key: 'retailChallanNo', label: 'Retail challan no.' },
         { key: 'masterHead', label: 'Master Head' },
         { key: 'fabric', label: 'Fabric' },
+        { key: 'chart', label: 'Chart' },
         { key: 'design', label: 'Design' },
         { key: 'dupatta', label: 'Dupatta', render: (row) => dupattaLabel(row.dupatta) },
         { key: 'dupQty', label: 'Dup. Qty', align: 'right' },
@@ -139,6 +141,7 @@ export default function ReceivePage({ kind }) {
                   masterId: issue.masterId ?? value.masterId,
                   masterText: issue.masterHead || value.masterText,
                   fabric: issue.fabric || value.fabric,
+                  chart: issue.chart || value.chart,
                   design: issue.design || value.design,
                   dupatta: issue.dupatta ?? value.dupatta,
                   rate: String(issue.rate ?? value.rate),
@@ -176,6 +179,7 @@ export default function ReceivePage({ kind }) {
           ),
         },
         { key: 'fabric', label: 'Fabric', icon: IconFabric, placeholder: 'Cotton' },
+        { key: 'chart', label: 'Chart', icon: IconChart, placeholder: 'chart-12' },
         { key: 'design', label: 'Design', icon: IconChart, placeholder: 'design-07' },
         { key: 'date', label: 'Date', type: 'date' },
 
@@ -246,6 +250,7 @@ export default function ReceivePage({ kind }) {
         masterId: issue?.masterId ?? '',
         masterText: issue?.masterHead ?? '',
         fabric: issue?.fabric ?? '',
+        chart: issue?.chart ?? '',
         design: issue?.design ?? '',
         date: today(),
         dupatta: issue?.dupatta ?? 'yes',
@@ -282,6 +287,7 @@ export default function ReceivePage({ kind }) {
       masterId: row.masterId ?? '',
       masterText: row.masterHead ?? '',
       fabric: row.fabric,
+      chart: row.chart,
       design: row.design,
       date: row.date,
       dupatta: row.dupatta ?? 'yes',
@@ -303,6 +309,7 @@ export default function ReceivePage({ kind }) {
         lotId: form.lotId ? Number(form.lotId) : null,
         masterId: form.masterId === '' ? null : Number(form.masterId),
         fabric: form.fabric,
+        chart: form.chart,
         design: form.design,
         dupatta: form.dupatta,
         dupQty: Number(form.dupQty || 0),
@@ -394,14 +401,7 @@ export default function ReceivePage({ kind }) {
           onDelete: remove,
           onHistory: openHistory,
           onShare: page.roles.canShare
-            ? (row, intent) =>
-                page.setShare({
-                  kind,
-                  direction: 'receive',
-                  ids: [row.id],
-                  masterHead: row.masterHead,
-                  intent,
-                })
+            ? (row, intent) => page.setShare({ kind, direction: 'receive', ids: [row.id], intent })
             : undefined,
         }}
       />

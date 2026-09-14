@@ -10,6 +10,7 @@ const base = (row) => ({
   masterId: row.master_id ? Number(row.master_id) : null,
   masterHead: row.master_head ?? '',
   fabric: row.fabric ?? '',
+  chart: row.chart ?? '',
   design: row.design ?? '',
   dupatta: row.dupatta ?? null,
   dupQty: Number(row.dup_qty ?? 0),

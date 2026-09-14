@@ -9,7 +9,7 @@ import { SqlBuilder, challanFilters } from './filters.js';
 
 const ISSUE_SELECT = `
   SELECT c.id, c.company_id, c.kind, c.challan_no, c.date, c.lot_id, l.lot_no,
-         c.master_id, m.name AS master_head, c.fabric, c.design, c.dupatta,
+         c.master_id, m.name AS master_head, c.fabric, c.chart, c.design, c.dupatta,
          c.dup_qty, c.quantity, c.rate, c.amount, c.created_at, c.updated_at,
          (c.quantity + c.dup_qty) AS issued_pieces,
          COALESCE(r.received_qty, 0) + COALESCE(r.received_dup, 0) AS received_pieces,
@@ -32,7 +32,7 @@ const RECEIVE_SELECT = `
   SELECT c.id, c.company_id, c.kind, c.challan_no, c.retail_challan_no, c.date,
          c.issue_challan_id, ic.challan_no AS issue_challan_no,
          c.lot_id, l.lot_no, c.master_id, m.name AS master_head,
-         c.fabric, c.design, c.dupatta, c.dup_qty, c.quantity, c.rate,
+         c.fabric, c.chart, c.design, c.dupatta, c.dup_qty, c.quantity, c.rate,
          c.damage_loss, c.amount, c.created_at, c.updated_at,
          (ic.quantity + ic.dup_qty) AS issued_pieces,
          COALESCE(agg.received_qty, 0) + COALESCE(agg.received_dup, 0) AS received_pieces,
@@ -82,12 +82,12 @@ export async function insertIssue(client, companyId, kind, d) {
   const { rows } = await client.query(
     `INSERT INTO issue_challans
        (company_id, kind, challan_no, date, lot_id, master_id, fabric, design,
-        dupatta, dup_qty, quantity, rate, amount, created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
+        dupatta, dup_qty, quantity, rate, amount, created_by, updated_by, chart)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14,$15)
      RETURNING id`,
     [
       companyId, kind, d.challanNo, d.date, d.lotId, d.masterId, d.fabric, d.design,
-      d.dupatta, d.dupQty, d.quantity, d.rate, d.amount, d.userId,
+      d.dupatta, d.dupQty, d.quantity, d.rate, d.amount, d.userId, d.chart,
     ],
   );
   return rows[0].id;
@@ -98,12 +98,12 @@ export async function updateIssue(client, companyId, kind, id, d) {
     `UPDATE issue_challans
         SET challan_no = $4, date = $5, lot_id = $6, master_id = $7, fabric = $8,
             design = $9, dupatta = $10, dup_qty = $11, quantity = $12, rate = $13,
-            amount = $14, updated_by = $15, updated_at = now()
+            amount = $14, chart = $16, updated_by = $15, updated_at = now()
       WHERE id = $1 AND company_id = $2 AND kind = $3 AND deleted_at IS NULL
       RETURNING id`,
     [
       id, companyId, kind, d.challanNo, d.date, d.lotId, d.masterId, d.fabric,
-      d.design, d.dupatta, d.dupQty, d.quantity, d.rate, d.amount, d.userId,
+      d.design, d.dupatta, d.dupQty, d.quantity, d.rate, d.amount, d.userId, d.chart,
     ],
   );
   return rows[0]?.id ?? null;
@@ -114,13 +114,13 @@ export async function insertReceive(client, companyId, kind, d) {
     `INSERT INTO receive_challans
        (company_id, kind, issue_challan_id, challan_no, retail_challan_no, date,
         lot_id, master_id, fabric, design, dupatta, dup_qty, quantity, rate,
-        damage_loss, amount, created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17)
+        damage_loss, amount, created_by, updated_by, chart)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17,$18)
      RETURNING id`,
     [
       companyId, kind, d.issueChallanId, d.challanNo, d.retailChallanNo, d.date,
       d.lotId, d.masterId, d.fabric, d.design, d.dupatta, d.dupQty, d.quantity,
-      d.rate, d.damageLoss, d.amount, d.userId,
+      d.rate, d.damageLoss, d.amount, d.userId, d.chart,
     ],
   );
   return rows[0].id;
@@ -132,13 +132,13 @@ export async function updateReceive(client, companyId, kind, id, d) {
         SET issue_challan_id = $4, challan_no = $5, retail_challan_no = $6, date = $7,
             lot_id = $8, master_id = $9, fabric = $10, design = $11, dupatta = $12,
             dup_qty = $13, quantity = $14, rate = $15, damage_loss = $16,
-            amount = $17, updated_by = $18, updated_at = now()
+            amount = $17, chart = $19, updated_by = $18, updated_at = now()
       WHERE id = $1 AND company_id = $2 AND kind = $3 AND deleted_at IS NULL
       RETURNING id`,
     [
       id, companyId, kind, d.issueChallanId, d.challanNo, d.retailChallanNo, d.date,
       d.lotId, d.masterId, d.fabric, d.design, d.dupatta, d.dupQty, d.quantity,
-      d.rate, d.damageLoss, d.amount, d.userId,
+      d.rate, d.damageLoss, d.amount, d.userId, d.chart,
     ],
   );
   return rows[0]?.id ?? null;

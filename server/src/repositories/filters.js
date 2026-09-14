@@ -88,6 +88,7 @@ export function challanFilters(builder, filters = {}, { alias = 'c', masterAlias
     .matches(`${alias}.challan_no`, filters.challanNo)
     .matches(`${masterAlias}.name`, filters.masterHead)
     .matches(`${alias}.fabric`, filters.fabric)
+    .matches(`${alias}.chart`, filters.chart)
     .matches(`${alias}.design`, filters.design)
     .dateFrom(`${alias}.date`, filters.dateFrom)
     .dateTo(`${alias}.date`, filters.dateTo);

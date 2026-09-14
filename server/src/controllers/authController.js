@@ -27,35 +27,47 @@ export const googleStart = asyncHandler(async (req, res) => {
 });
 
 /**
- * Root-only: re-runs consent asking additionally for Drive, so the Backup
- * button has a refresh token. Everyone else never sees a Drive prompt.
+ * Root-only, and the first half of every backup: asks Google for Drive
+ * permission afresh, with the consent screen forced and root's own account
+ * preselected. The callback parks that one-off token for the backup to use
+ * once.
  */
 export const googleConnectDrive = asyncHandler(async (req, res) => {
   if (!env.google.configured) {
-    return res.redirect(`${clientOrigin()}/users?error=google_not_configured`);
+    return res.redirect(`${clientOrigin()}/users?driveError=google_not_configured`);
   }
-  res.redirect(authService.beginGoogleSignIn(req, { includeDrive: true }));
+  res.redirect(
+    authService.beginGoogleSignIn(req, { includeDrive: true, loginHint: req.user.email }),
+  );
 });
 
 export const googleCallback = asyncHandler(async (req, res) => {
   const { code, state, error } = req.query;
 
+  // Read before completeGoogleSignIn clears it: a declined or refused backup
+  // grant belongs back on the Users page, not on the login screen.
+  const forDrive = req.session.oauthWantsDrive === true;
+  const fail = (reason) =>
+    res.redirect(
+      `${clientOrigin()}/${forDrive ? 'users?driveError' : 'login?error'}=${encodeURIComponent(reason)}`,
+    );
+
   if (error || !code) {
-    return res.redirect(`${clientOrigin()}/login?error=${encodeURIComponent(error || 'no_code')}`);
+    delete req.session.oauthState;
+    delete req.session.oauthWantsDrive;
+    return fail(error || 'no_code');
   }
 
   let result;
   try {
     result = await authService.completeGoogleSignIn(req, { code, state });
   } catch (failure) {
-    return res.redirect(
-      `${clientOrigin()}/login?error=${encodeURIComponent(failure.message || 'sign_in_failed')}`,
-    );
+    return fail(failure.message || 'sign_in_failed');
   }
 
-  // A Drive re-authorisation returns to the page that started it.
-  if (result?.driveConnected) {
-    return res.redirect(`${clientOrigin()}/users?drive=connected`);
+  // A backup grant returns to the Users page, which then runs the backup.
+  if (result?.driveGranted) {
+    return res.redirect(`${clientOrigin()}/users?drive=granted`);
   }
 
   // The client reads /api/auth/me on load and routes to the right screen.

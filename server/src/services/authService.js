@@ -5,7 +5,7 @@ import * as userRepository from '../repositories/userRepository.js';
 import * as logService from './logService.js';
 import { toUser } from '../models/user.js';
 import { buildAuthUrl, exchangeCode, DRIVE_SCOPE } from '../config/google.js';
-import { LOG_ACTIONS, USER_STATUS } from '../config/constants.js';
+import { LOG_ACTIONS, ROLES, USER_STATUS } from '../config/constants.js';
 import { badRequest, forbidden, unauthorized } from '../utils/httpError.js';
 
 /**
@@ -30,14 +30,14 @@ const PIN_ROUNDS = 10;
 /**
  * Creates the consent URL and stores the CSRF state on the session.
  *
- * `includeDrive` is set only by the root user's explicit Drive connect step, so
- * ordinary sign-ins never request a sensitive scope.
+ * `includeDrive` is set only when root presses Backup, so ordinary sign-ins
+ * never ask for Drive. `loginHint` preselects root's account on that screen.
  */
-export function beginGoogleSignIn(req, { includeDrive = false } = {}) {
+export function beginGoogleSignIn(req, { includeDrive = false, loginHint } = {}) {
   const state = crypto.randomBytes(16).toString('hex');
   req.session.oauthState = state;
   req.session.oauthWantsDrive = includeDrive;
-  return buildAuthUrl(state, { includeDrive });
+  return buildAuthUrl(state, { includeDrive, loginHint });
 }
 
 /**
@@ -53,23 +53,18 @@ export async function completeGoogleSignIn(req, { code, state }) {
   const wantedDrive = req.session.oauthWantsDrive === true;
   delete req.session.oauthWantsDrive;
 
-  const { profile, refreshToken, grantedScopes } = await exchangeCode(code);
+  const { profile, accessToken, expiresAt, grantedScopes } = await exchangeCode(code);
   if (!profile.emailVerified) {
     throw forbidden('That Google account does not have a verified email address.');
   }
 
+  // A backup's Drive grant, not a sign-in: root is already signed in, and
+  // nothing about any account row should change.
+  if (wantedDrive) {
+    return grantDriveForBackup(req, { profile, accessToken, expiresAt, grantedScopes });
+  }
+
   const row = await userRepository.upsertFromGoogle(profile);
-
-  // Only keep a refresh token when Drive was actually granted - it exists to
-  // run backups, and nothing else uses it.
-  if (refreshToken && grantedScopes.includes(DRIVE_SCOPE)) {
-    await userRepository.setRefreshToken(row.id, refreshToken);
-  }
-
-  // Re-authorising for Drive happens while already signed in; keep the session.
-  if (wantedDrive && req.session.userId) {
-    return { stage: STAGE.AUTHENTICATED, user: toUser(row), driveConnected: true };
-  }
 
   // Identified by Google, but not signed in until the PIN is accepted.
   req.session.pendingUserId = Number(row.id);
@@ -77,6 +72,49 @@ export async function completeGoogleSignIn(req, { code, state }) {
   delete req.session.companyId;
 
   return stageFor(row);
+}
+
+/** How long a Drive grant may wait between the consent screen and its backup. */
+const DRIVE_GRANT_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * The Drive half of the callback. Nothing is written to the database: the
+ * access token is parked on the session for the single backup it was granted
+ * for, and backupService takes it off the session and uses it once.
+ *
+ * Nothing is revoked here - see services/backupService.js for how revoking made
+ * every backup after the first fail. A refused token is simply dropped.
+ */
+async function grantDriveForBackup(req, { profile, accessToken, expiresAt, grantedScopes }) {
+  const row = req.session.userId ? await userRepository.findById(req.session.userId) : null;
+  if (!row || row.role !== ROLES.ROOT) {
+    throw forbidden('Only the root user can take a backup.');
+  }
+
+  // Backups land in root's own Drive. Consenting as some other Google account
+  // would quietly send them somewhere else.
+  if (profile.email !== String(row.email).toLowerCase()) {
+    throw forbidden(`Choose ${row.email} on the Google screen - backups go to that account's Drive.`);
+  }
+
+  if (!accessToken || !grantedScopes.includes(DRIVE_SCOPE)) {
+    // Google's consent screen lists Drive as its own checkbox, and Continue
+    // without ticking it grants sign-in only. Logs the scopes Google actually
+    // returned - never the token - so a repeat is traceable.
+    console.warn(`[backup] Drive scope not granted; Google returned: ${grantedScopes.join(' ') || '(none)'}`);
+    throw badRequest(
+      'Google Drive access was not ticked. On the Google screen, tick the Google Drive permission (or "Select all"), then Continue.',
+    );
+  }
+
+  req.session.driveGrant = {
+    accessToken,
+    userId: Number(row.id),
+    // Our own short window, or Google's expiry if that comes first.
+    expiresAt: Math.min(Date.now() + DRIVE_GRANT_TTL_MS, Number(expiresAt) || Infinity),
+  };
+
+  return { stage: STAGE.AUTHENTICATED, user: toUser(row), driveGranted: true };
 }
 
 /** Which screen a user row belongs on. */

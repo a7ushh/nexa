@@ -3,8 +3,8 @@ import { z } from 'zod';
 import * as userService from '../services/userService.js';
 import * as logService from '../services/logService.js';
 import * as backupService from '../services/backupService.js';
-import { requireAuth, requirePage } from '../middleware/auth.js';
-import { ALL_ROLES } from '../config/constants.js';
+import { requireAuth, requirePage, requireRole } from '../middleware/auth.js';
+import { ALL_ROLES, ROLES } from '../config/constants.js';
 import { asyncHandler } from '../utils/httpError.js';
 
 const idParam = z.coerce.number().int().positive();
@@ -41,9 +41,11 @@ users.delete(
   }),
 );
 
-// steps.md places the backup button on the users page.
+// steps.md places the backup button on the users page. Owners can open the
+// page, but the Drive grant a backup runs on is root's alone.
 users.post(
   '/backup',
+  requireRole(ROLES.ROOT),
   asyncHandler(async (req, res) => res.json(await backupService.run(req))),
 );
 
